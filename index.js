@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.5.0
- * Refined for ST 1.17+ with direct Gemini API support.
+ * Azaria Style Harmonizer v1.5.1
+ * Refined for ST 1.17+ with direct Gemini API support and Comparison Logs.
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -44,6 +44,7 @@ globalThis.azariaStyleInterceptor = async function(chat, contextSize, abort, typ
 // Default Configuration
 const defaultSettings = {
     enabled: true,
+    compareLogs: false,
     mode: "external", 
     selectedProfile: "current", 
     backendUrl: "REPLACE_ME",
@@ -121,6 +122,13 @@ async function onMessageReceived(data) {
         }
 
         if (refined && refined !== sourceText) {
+            if (settings.compareLogs) {
+                azLog("--- HARMONIZATION COMPARISON ---");
+                azLog(`[ORIGINAL]: ${sourceText}`);
+                azLog(`[HARMONIZED]: ${refined}`);
+                azLog("---------------------------------");
+            }
+
             azLog("Style harmony achieved. Updating.");
             message.mes = refined;
             message.azaria_processed = true; // Mark to avoid loops
@@ -317,7 +325,11 @@ async function buildUI() {
                     <div class="flex-container">
                         <label>
                             <input type="checkbox" id="${extensionName}-enabled" ${settings.enabled ? 'checked' : ''}>
-                            Enable Engine (Harmonize Outputs)
+                            Enable Engine
+                        </label>
+                        <label style="margin-left: 15px;">
+                            <input type="checkbox" id="${extensionName}-compare" ${settings.compareLogs ? 'checked' : ''}>
+                            Comparison Logs
                         </label>
                     </div>
 
@@ -384,7 +396,7 @@ async function buildUI() {
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.5.0-BRUTALIST</span>
+                        <span style="align-self: flex-end;">v1.5.1-DEBUG</span>
                     </div>
                 </div>
             </div>
@@ -427,6 +439,11 @@ async function buildUI() {
 
         $(`#${extensionName}-enabled`).on('change', function() {
             settings.enabled = !!$(this).prop('checked');
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-compare`).on('change', function() {
+            settings.compareLogs = !!$(this).prop('checked');
             saveSettingsDebounced();
         });
 
