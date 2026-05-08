@@ -1,11 +1,28 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.3.8
+ * Azaria Style Harmonizer v1.4.0
  * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
  */
 
 const extensionName = "azaria-style-harmonizer";
+
+// Global Interceptor - The "Hardcore" ST way
+globalThis.azariaStyleInterceptor = async function(chat, contextSize, abort, type) {
+    if (!settings?.enabled) return;
+    console.log("[AZARIA] Interceptor Triggered Type:", type);
+
+    // We only care about the last message if it's the one currently being generated
+    // Or we let the standard hooks handle the render. 
+    // Actually, let's use the interception to inject the STYLE DIRECTIVES directly into the prompt
+    // if we are in "Internal" mode.
+    if (settings.mode === "internal" && chat.length > 0) {
+        const lastMsg = chat[chat.length - 1];
+        if (!lastMsg.is_user) {
+            // Experimental: Pre-process the context
+        }
+    }
+};
 
 // Default Configuration
 const defaultSettings = {
@@ -14,7 +31,7 @@ const defaultSettings = {
     selectedProfile: "current", 
     backendUrl: "REPLACE_ME",
     directApiKey: "",
-    directModel: "gemini-2.0-flash",
+    directModel: "gemini-3-flash-preview",
     directTemp: 0.7,
     directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
     systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
@@ -28,42 +45,49 @@ let settings;
 /**
  * Handle message refinement logic
  */
-async function onMessageReceived(messageId) {
+async function onMessageReceived(data) {
     const context = SillyTavern.getContext();
-    if (!settings.enabled) return;
+    if (!settings?.enabled) return;
 
+    // MESSAGE_RECEIVED passes the index or message object depending on ST version
+    const messageId = typeof data === 'object' ? data.id : data;
     const chat = context.chat;
-    const message = chat.find(m => m.id === messageId);
+    const message = chat.find(m => m.id === messageId) || chat[messageId];
     
     if (!message || message.is_user) return;
 
-    // Toast feedback for Android/Mobile users
-    context.callToast("[AZARIA] Refinement in progress...", "info");
-    console.log("[AZARIA] Refining message:", messageId);
+    context.callToast("[AZARIA] Refining output...", "info");
 
-    let refined;
     try {
+        const sourceText = message.mes;
+        let refined;
+        
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 45000));
         
         if (settings.mode === "external") {
-            console.log("[AZARIA] Sending to external engine...");
-            refined = await Promise.race([harmonizeExternal(message.mes), timeoutPromise]);
+            refined = await Promise.race([harmonizeExternal(sourceText), timeoutPromise]);
         } else {
-            console.log("[AZARIA] Sending to internal ST generator...");
-            refined = await Promise.race([harmonizeInternal(message.mes), timeoutPromise]);
+            refined = await Promise.race([harmonizeInternal(sourceText), timeoutPromise]);
+        }
+
+        if (refined && refined !== sourceText) {
+            message.mes = refined;
+            // Update the UI
+            if (context.updateMessageMes) {
+                context.updateMessageMes(messageId, refined);
+            }
+            // Trigger a re-render if possible
+            const $msg = $(`[data-id="${messageId}"]`);
+            if ($msg.length) {
+                // Manually update text if ST reactive binding fails
+                $msg.find('.mes_text').text(refined);
+            }
+            
+            context.callToast("[AZARIA] Style Applied", "success");
         }
     } catch (e) {
-        console.error("[AZARIA] Refinement failed:", e);
-        context.callToast(`[AZARIA] Refinement failed: ${e.message}`, "error");
-        return;
-    }
-
-    if (refined && refined !== message.mes) {
-        message.mes = refined;
-        context.updateMessageMes(messageId, refined);
-        context.callToast("[AZARIA] Harmonization Complete", "success");
-    } else {
-        context.callToast("[AZARIA] No changes required", "info");
+        console.error("[AZARIA] Logic failure:", e);
+        context.callToast(`[AZARIA] Error: ${e.message}`, "error");
     }
 }
 
