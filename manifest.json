@@ -1,6 +1,6 @@
 {
     "display_name": "Azaria Style Harmonizer",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "author": "Elysia Hjort",
     "description": "Refines and harmonizes AI outputs using the Azaria Functions Style Engine.",
     "js": "index.js",

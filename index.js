@@ -1,27 +1,24 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.0
- * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
+ * Azaria Style Harmonizer v1.4.1
+ * Refined for ST 1.17+ with internal logging.
  */
 
 const extensionName = "azaria-style-harmonizer";
+const logs = [];
 
-// Global Interceptor - The "Hardcore" ST way
+function azLog(msg, type = "info") {
+    const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logs.push(entry);
+    if (logs.length > 50) logs.shift();
+    console.log(`[AZARIA] ${msg}`);
+}
+
+// Global Interceptor
 globalThis.azariaStyleInterceptor = async function(chat, contextSize, abort, type) {
     if (!settings?.enabled) return;
-    console.log("[AZARIA] Interceptor Triggered Type:", type);
-
-    // We only care about the last message if it's the one currently being generated
-    // Or we let the standard hooks handle the render. 
-    // Actually, let's use the interception to inject the STYLE DIRECTIVES directly into the prompt
-    // if we are in "Internal" mode.
-    if (settings.mode === "internal" && chat.length > 0) {
-        const lastMsg = chat[chat.length - 1];
-        if (!lastMsg.is_user) {
-            // Experimental: Pre-process the context
-        }
-    }
+    azLog(`Interceptor fired: ${type}`);
 };
 
 // Default Configuration
@@ -49,14 +46,20 @@ async function onMessageReceived(data) {
     const context = SillyTavern.getContext();
     if (!settings?.enabled) return;
 
-    // MESSAGE_RECEIVED passes the index or message object depending on ST version
+    azLog("Message detected, analyzing...");
+
+    // ST 1.17 event data structure lookup
     const messageId = typeof data === 'object' ? data.id : data;
-    const chat = context.chat;
+    const chat = context.chat || [];
     const message = chat.find(m => m.id === messageId) || chat[messageId];
     
-    if (!message || message.is_user) return;
+    if (!message || message.is_user) {
+        azLog(`Skipping: ${!message ? "No message" : "Is user message"}`);
+        return;
+    }
 
-    context.callToast("[AZARIA] Refining output...", "info");
+    context.callToast("[AZARIA] Harvesting text...", "info");
+    azLog(`Refining message ID: ${messageId}`);
 
     try {
         const sourceText = message.mes;
@@ -65,28 +68,35 @@ async function onMessageReceived(data) {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 45000));
         
         if (settings.mode === "external") {
+            azLog("Sending to External Engine...");
             refined = await Promise.race([harmonizeExternal(sourceText), timeoutPromise]);
         } else {
+            azLog("Sending to Internal Generator...");
             refined = await Promise.race([harmonizeInternal(sourceText), timeoutPromise]);
         }
 
         if (refined && refined !== sourceText) {
+            azLog("Style harmony achieved. Updating DOM.");
             message.mes = refined;
-            // Update the UI
+            
             if (context.updateMessageMes) {
                 context.updateMessageMes(messageId, refined);
             }
-            // Trigger a re-render if possible
+            
+            // Force re-render for mobile clients
             const $msg = $(`[data-id="${messageId}"]`);
             if ($msg.length) {
-                // Manually update text if ST reactive binding fails
-                $msg.find('.mes_text').text(refined);
+                const $text = $msg.find('.mes_text');
+                if ($text.length) $text.text(refined);
             }
             
-            context.callToast("[AZARIA] Style Applied", "success");
+            context.callToast("[AZARIA] Applied Style Harmonization", "success");
+        } else {
+            azLog("No stylistic variances detected.");
+            context.callToast("[AZARIA] Output already harmonious", "info");
         }
     } catch (e) {
-        console.error("[AZARIA] Logic failure:", e);
+        azLog(`Logic failure: ${e.message}`, "error");
         context.callToast(`[AZARIA] Error: ${e.message}`, "error");
     }
 }
@@ -110,38 +120,33 @@ async function harmonizeExternal(text) {
         const data = await response.json();
         return data.refinedText || text;
     } catch (error) {
-        console.error("[AZARIA] External API failed:", error);
+        azLog(`External API failed: ${error.message}`);
         return text;
     }
 }
 
 async function harmonizeInternal(text) {
     const context = SillyTavern.getContext();
-    const { generateQuietPrompt } = context;
-    
-    // Fallback if generateQuietPrompt is missing
-    const generator = generateQuietPrompt || context.generateRaw;
+    const generator = context.generateQuietPrompt || context.generateRaw;
     
     if (!generator) {
-        console.error("[AZARIA] No generation function found in context.");
+        azLog("No usable generator found in context.");
         return text;
     }
 
     const prompt = `${settings.systemInstruction}\n\nSTYLE DIRECTIVES:\n${settings.directives}\n\nTEXT TO REWRITE:\n"${text}"\n\nREWRITTEN TEXT:`;
     
     try {
-        // Prepare generation options
         const options = {
             prompt: prompt,
             quiet: true,
-            // Try to use the selected profile if it's not "current"
             ...(settings.selectedProfile !== 'current' ? { api_preset: settings.selectedProfile } : {})
         };
 
         const result = await generator(options);
         return result.trim().replace(/^"|"$/g, '') || text;
     } catch (error) {
-        console.error("[AZARIA] Internal ST Backend failed:", error);
+        azLog(`Internal Gen failed: ${error.message}`);
         return text;
     }
 }
@@ -155,25 +160,22 @@ async function buildUI() {
 
     if ($(`#${extensionName}-settings`).length) return; 
 
-    // Sync settings with ST storage
+    azLog("Building Extension UI...");
+
     if (!extensionSettings[extensionName]) {
         extensionSettings[extensionName] = JSON.parse(JSON.stringify(defaultSettings));
     }
     settings = extensionSettings[extensionName];
 
-    // Profile handling - expanded search for ST 1.17
     const getProfiles = () => {
-        const ctxSettings = context.settings || {};
         const st = window.SillyTavern || {};
-        
-        // ST 1.17+ often keeps these in more specialized spots
         const candidates = [
-            ctxSettings.api_presets,
+            context.settings?.api_presets,
             st.api_presets,
             context.api_presets,
             st.presets,
             context.presets,
-            ctxSettings.presets
+            context.settings?.presets
         ];
 
         for (const list of candidates) {
@@ -220,7 +222,7 @@ async function buildUI() {
                         <div style="display: flex; gap: 5px;">
                             <div style="flex: 1;">
                                 <span style="font-size: 9px;">Model:</span>
-                                <input type="text" id="${extensionName}-direct-model" value="${settings.directModel || 'gemini-2.0-flash'}" style="width: 100%; font-size: 9px;">
+                                <input type="text" id="${extensionName}-direct-model" value="${settings.directModel || 'gemini-3-flash-preview'}" style="width: 100%; font-size: 9px;">
                             </div>
                             <div style="width: 50px;">
                                 <span style="font-size: 9px;">Temp:</span>
@@ -261,21 +263,19 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.3.8-mod</span>
+                        <span>v1.4.1-log</span>
                     </div>
                 </div>
             </div>
         </div>
     `;
 
-    // Modern 1.12+ extension settings container
     const $container = $('#extensions_settings').length ? $('#extensions_settings') : $('#extension_settings');
     
     if ($container.length) {
         $container.append(html);
-        console.log("[AZARIA] UI appended to extension settings.");
+        azLog("UI appended to settings panel.");
 
-        // Wire up events
         $(`#${extensionName}-enabled`).on('change', function() {
             settings.enabled = !!$(this).prop('checked');
             saveSettingsDebounced();
@@ -309,16 +309,14 @@ async function buildUI() {
         });
 
         $(`#${extensionName}-refresh-profiles`).on('click', function() {
-            const profiles = getProfiles();
+            const freshProfiles = getProfiles();
             const $select = $(`#${extensionName}-profile-select`);
             const current = $select.val();
             $select.empty();
             $select.append(`<option value="current" ${current === 'current' ? 'selected' : ''}>[Active Profile]</option>`);
-            profiles.forEach(p => {
+            freshProfiles.forEach(p => {
                 const name = typeof p === 'string' ? p : p.name;
-                if (name) {
-                    $select.append(`<option value="${name}" ${current === name ? 'selected' : ''}>${name}</option>`);
-                }
+                if (name) $select.append(`<option value="${name}" ${current === name ? 'selected' : ''}>${name}</option>`);
             });
             context.callToast("Profiles refreshed", "info");
         });
@@ -348,19 +346,14 @@ async function buildUI() {
             if (name) {
                 const id = Date.now().toString();
                 settings.presets = settings.presets || [];
-                settings.presets.push({
-                    id,
-                    name,
-                    directives: settings.directives,
-                    instruction: settings.systemInstruction
-                });
+                settings.presets.push({ id, name, directives: settings.directives, instruction: settings.systemInstruction });
                 $(`#${extensionName}-preset-list`).append(`<option value="${id}">${name}</option>`);
                 saveSettingsDebounced();
                 context.callToast(`Preset "${name}" saved`, "success");
             }
         });
     } else {
-        console.warn("[AZARIA] Settings container not found yet. Retrying in 2s.");
+        azLog("Settings container not found yet. Retrying buildUI...");
         setTimeout(buildUI, 2000);
     }
 }
@@ -369,47 +362,50 @@ async function buildUI() {
  * LIFECYCLE HOOK: Activate
  */
 export async function onActivate() {
-    console.log("[AZARIA] Activating Azaria Style Harmonizer...");
+    azLog("Activating...");
     const context = SillyTavern.getContext();
     const { eventSource, event_types, extensionSettings } = context;
 
-    // Load settings
     if (!extensionSettings[extensionName]) {
         extensionSettings[extensionName] = JSON.parse(JSON.stringify(defaultSettings));
     }
     settings = extensionSettings[extensionName];
 
-    // Register Event Hooks
+    // Listen to multiple event types to ensure capture
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
 
-    // Register Slash Command (Modern API)
+    // Register Log Command
     try {
-        const { SlashCommandParser, SlashCommand, SlashCommandArgument } = context;
-        if (SlashCommandParser && SlashCommand) {
+        const { SlashCommandParser, SlashCommand } = context;
+        if (SlashCommandParser) {
+            SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+                name: 'azlog',
+                callback: () => {
+                    const output = "--- AZARIA DEBUG LOGS ---\n" + logs.join("\n");
+                    return output;
+                },
+                helpString: 'Displays the Azaria Style Engine execution logs.',
+            }));
+            
             SlashCommandParser.addCommandObject(SlashCommand.fromProps({
                 name: 'azaria',
-                callback: (namedArgs, unnamedArgs) => {
+                callback: () => {
                     const status = settings.enabled ? "ACTIVE" : "DISABLED";
-                    const mode = settings.mode === 'external' ? "Gemini Engine" : "ST Profile";
-                    return `Azaria Style Engine Status: ${status}\nMode: ${mode}`;
+                    return `Azaria Style Engine Status: ${status}\nLogs: Use /azlog to view details.`;
                 },
-                helpString: 'Check the status of the Azaria Style Harmonizer engine.',
-                aliases: ['az']
+                helpString: 'Check engine status.',
             }));
-            console.log("[AZARIA] Slash command /azaria registered.");
         }
     } catch (e) {
-        console.warn("[AZARIA] Failed to register slash command object:", e);
+        azLog(`Slash command failure: ${e.message}`);
     }
 
-    // Build UI on APP_READY
     eventSource.on(event_types.APP_READY, buildUI);
     
-    // In case App is already ready
     if (document.readyState === 'complete') {
         buildUI();
     }
 }
 
-// Global fallback for legacy loaders
 window.onActivate = onActivate;
