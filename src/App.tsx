@@ -128,12 +128,12 @@ export default function App() {
                 
                 <section>
                   <h3 className="font-bold text-az-text mb-2">02. INSTALLATION (MODERN METHOD)</h3>
-                  <p className="opacity-70 mb-2">SillyTavern now supports installing extensions directly from Git repositories. To install this engine:</p>
+                  <p className="opacity-70 mb-2">SillyTavern now supports installing extensions directly. Since this is an AI Studio app, you can use the direct manifest URL:</p>
                   <ul className="list-disc list-inside space-y-2 opacity-80 decoration-az-orange">
-                    <li>Copy the URL of this application (from your browser's address bar).</li>
+                    <li>Copy this URL: <strong>{window.location.origin}/manifest.json</strong></li>
                     <li>In SillyTavern, go to the <strong>Extensions</strong> (puzzle icon) tab.</li>
-                    <li>Click <strong>Install Extension</strong> and paste this App's URL.</li>
-                    <li>The <code>manifest.json</code> and <code>st-extension.js</code> will be automatically imported.</li>
+                    <li>Click <strong>Install Extension</strong> and paste the manifest URL.</li>
+                    <li>The engine will initialize, and you can switch between <strong>External Gemini</strong> or your <strong>Internal ST Connection Profile</strong> via the dropdown.</li>
                   </ul>
                 </section>
 
