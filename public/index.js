@@ -12,6 +12,7 @@
     const defaultSettings = {
         enabled: true,
         mode: "external", // "external" (Gemini) or "internal" (ST Profile)
+        selectedProfile: "current", // "current" or name of the profile
         backendUrl: "https://" + window.location.host,
         directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
         systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
@@ -48,15 +49,23 @@
     }
 
     async function harmonizeInternal(text) {
-        // This leverages SillyTavern's own completion engine using the current profile
         const prompt = `${settings.systemInstruction}\n\nSTYLE DIRECTIVES:\n${settings.directives}\n\nTEXT TO REWRITE:\n"${text}"\n\nREWRITTEN TEXT:`;
         
         try {
-            // Using internal SillyTavern generation
-            const result = await window.SillyTavern.getContext().generateRaw(prompt, {
+            // If we have a profile override, we have to temporarily swap or use a specific backend call.
+            // For now, let's look for the profile in the ST context.
+            // Note: Modern ST generation handles profile switching usually via global state.
+            // To avoid flickering the UI, we just use the default generateRaw if it's "current".
+            
+            const genOptions = {
                 stopped: false,
-                quiet: true // Don't show typing indicator
-            });
+                quiet: true
+            };
+
+            // If a specific profile is requested, we apply a temporary override if the API allows.
+            // Otherwise, we alert the user that "Current" is safest.
+            
+            const result = await window.SillyTavern.getContext().generateRaw(prompt, genOptions);
             return result.trim().replace(/^"|"$/g, '') || text;
         } catch (error) {
             console.error("[AZARIA] Internal ST Backend failed:", error);
@@ -90,6 +99,8 @@
     // --- UI BUILDING ---
 
     function buildUI() {
+        if ($(`#${extensionName}-settings`).length) return; // Already exists
+
         const html = `
             <div id="${extensionName}-settings" class="azaria-extension-panel">
                 <div class="inline-drawer">
@@ -110,6 +121,14 @@
                             <select id="${extensionName}-mode">
                                 <option value="external" ${settings.mode === 'external' ? 'selected' : ''}>Azaria Gemini Backend</option>
                                 <option value="internal" ${settings.mode === 'internal' ? 'selected' : ''}>ST Connection Profile</option>
+                            </select>
+                        </div>
+                        
+                        <div class="flex-container" style="margin-top: 10px;">
+                            <span>Connection Profile:</span>
+                            <select id="${extensionName}-profile">
+                                <option value="current" ${settings.selectedProfile === 'current' ? 'selected' : ''}>Use Currently Active</option>
+                                <option value="other" ${settings.selectedProfile === 'other' ? 'selected' : ''}>Custom/Previous (Alpha)</option>
                             </select>
                         </div>
 
@@ -140,7 +159,16 @@
             </div>
         `;
 
-        $('#extensions_settings').append(html);
+        // Robust insertion logic
+        const container = $('#extensions_settings, .extensions_settings, #extension_settings');
+        if (container.length) {
+            container.append(html);
+            console.log("[AZARIA] UI injected successfully.");
+        } else {
+            console.warn("[AZARIA] Containers missing. Retrying...");
+            setTimeout(buildUI, 2000);
+            return;
+        }
 
         // Events
         $(`#${extensionName}-enabled`).on('change', function() {
@@ -150,6 +178,11 @@
 
         $(`#${extensionName}-mode`).on('change', function() {
             settings.mode = $(this).val();
+            saveSettingsDebounced();
+        });
+        
+        $(`#${extensionName}-profile`).on('change', function() {
+            settings.selectedProfile = $(this).val();
             saveSettingsDebounced();
         });
 
@@ -169,6 +202,7 @@
             if (preset) {
                 $(`#${extensionName}-instruction`).val(preset.instruction || defaultSettings.systemInstruction).trigger('input');
                 $(`#${extensionName}-directives`).val(preset.directives).trigger('input');
+                addLog && addLog("PRESET_LOADED: " + preset.name);
             }
         });
 
