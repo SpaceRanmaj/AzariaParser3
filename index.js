@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.5.1
- * Refined for ST 1.17+ with direct Gemini API support and Comparison Logs.
+ * Azaria Style Harmonizer v1.5.2
+ * Refined for ST 1.17+ with direct Gemini API support and Advanced Comparison Logs.
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -320,6 +320,7 @@ async function buildUI() {
                         <button id="${extensionName}-sync-btn" class="menu_button" title="Update Sync URL" style="font-size: 9px; padding: 2px 10px;">Sync URL</button>
                         <button id="${extensionName}-test-btn" class="menu_button" title="Reprocess Last Message" style="font-size: 9px; padding: 2px 10px;">Test Last</button>
                         <button id="${extensionName}-show-logs" class="menu_button" title="View Debug Logs" style="font-size: 9px; padding: 2px 10px;">Logs</button>
+                        <button id="${extensionName}-clear-logs" class="menu_button" title="Clear All Logs" style="font-size: 9px; padding: 2px 10px;">Clear</button>
                     </div>
 
                     <div class="flex-container">
@@ -396,7 +397,7 @@ async function buildUI() {
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.5.1-DEBUG</span>
+                        <span style="align-self: flex-end;">v1.5.2-FINAL</span>
                     </div>
                 </div>
             </div>
@@ -476,11 +477,20 @@ async function buildUI() {
 
         $(`#${extensionName}-show-logs`).on('click', () => {
             const { Popup } = SillyTavern.getContext();
+            const logContent = logs.join("\n") || "No analysis data captured in this session.";
+            
             if (Popup) {
-                Popup.show.text("Azaria Engine Logs", logs.join("\n") || "No logs yet.");
+                // Use a slightly larger popup view if possible, or just formatted text
+                Popup.show.text(`<div style="font-family: monospace; font-size: 11px; white-space: pre-wrap; max-height: 500px; overflow-y: auto; text-align: left;">${logContent}</div>`, "Azaria Debug Pulse");
             } else {
-                alert(logs.join("\n"));
+                alert(logContent);
             }
+        });
+
+        $(`#${extensionName}-clear-logs`).on('click', () => {
+            logs = [`[AZARIA] Data stream reset at ${new Date().toLocaleTimeString()}`];
+            globalThis.AZARIA_LOGS = logs;
+            safeToast("Logs cleared", "info");
         });
 
         $(`#${extensionName}-diag-btn`).on('click', async () => {
