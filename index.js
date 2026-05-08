@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.3
+ * Azaria Style Harmonizer v1.4.4
  * Refined for ST 1.17+ with Popup Logging and Diagnostics.
  */
 
@@ -47,25 +47,51 @@ let settings;
  * Handle message refinement logic
  */
 async function onMessageReceived(data) {
-    const context = SillyTavern.getContext();
-    if (!settings?.enabled) return;
-
-    azLog("Message detected, analyzing...");
-
-    // ST 1.17 event data structure lookup
-    const messageId = typeof data === 'object' ? data.id : data;
-    const chat = context.chat || [];
-    const message = chat.find(m => m.id === messageId) || chat[messageId];
-    
-    if (!message || message.is_user) {
-        azLog(`Skipping: ${!message ? "No message" : "Is user message"}`);
-        return;
-    }
-
-    context.callToast("[AZARIA] Harvesting text...", "info");
-    azLog(`Refining message ID: ${messageId}`);
-
     try {
+        const context = SillyTavern.getContext();
+        if (!settings?.enabled) return;
+
+        azLog("Event received (MESSAGE_RECEIVED/RENDERED)");
+
+        const chat = context.chat || [];
+        let message = null;
+        let messageIndex = -1;
+
+        // Robust message lookup for 1.17
+        if (typeof data === 'number') {
+            messageIndex = data;
+            message = chat[messageIndex];
+        } else if (typeof data === 'object' && data !== null) {
+            // Check for index or id in payload
+            const id = data.id !== undefined ? data.id : data.index;
+            if (id !== undefined) {
+                messageIndex = id;
+                message = chat[messageIndex] || chat.find(m => m.id === id);
+            } else if (data.mes !== undefined) {
+                // data IS the message object
+                message = data;
+                messageIndex = chat.indexOf(message);
+            }
+        }
+
+        if (!message) {
+            azLog("Could not resolve message from event data.");
+            return;
+        }
+
+        if (message.is_user || message.is_system) {
+            azLog(`Skipping: is_user=${message.is_user}, is_system=${message.is_system}`);
+            return;
+        }
+
+        if (message.azaria_processed) {
+            azLog("Message already processed, skipping.");
+            return;
+        }
+
+        azLog(`Refining message: "${message.mes?.substring(0, 30)}..."`);
+        context.callToast("[AZARIA] Harvesting text...", "info");
+
         const sourceText = message.mes;
         let refined;
         
@@ -80,15 +106,16 @@ async function onMessageReceived(data) {
         }
 
         if (refined && refined !== sourceText) {
-            azLog("Style harmony achieved. Updating DOM.");
+            azLog("Style harmony achieved. Updating.");
             message.mes = refined;
+            message.azaria_processed = true; // Mark to avoid loops
             
-            if (context.updateMessageMes) {
-                context.updateMessageMes(messageId, refined);
+            if (context.updateMessageMes && messageIndex !== -1) {
+                context.updateMessageMes(messageIndex, refined);
             }
             
-            // Force re-render for mobile clients
-            const $msg = $(`[data-id="${messageId}"]`);
+            // Force re-render
+            const $msg = $(`[data-id="${messageIndex}"]`).length ? $(`[data-id="${messageIndex}"]`) : $(`.mes[data-id="${messageIndex}"]`);
             if ($msg.length) {
                 const $text = $msg.find('.mes_text');
                 if ($text.length) $text.text(refined);
@@ -97,11 +124,9 @@ async function onMessageReceived(data) {
             context.callToast("[AZARIA] Applied Style Harmonization", "success");
         } else {
             azLog("No stylistic variances detected.");
-            context.callToast("[AZARIA] Output already harmonious", "info");
         }
     } catch (e) {
-        azLog(`Logic failure: ${e.message}`, "error");
-        context.callToast(`[AZARIA] Error: ${e.message}`, "error");
+        azLog(`Refinement failure: ${e.message}`, "error");
     }
 }
 
@@ -204,8 +229,9 @@ async function buildUI() {
                 </div>
                 <div class="inline-drawer-content" style="display: none; padding: 10px; border: 1px dashed var(--black30);">
                     <div class="flex-container" style="justify-content: space-between; margin-bottom: 10px;">
-                        <button id="${extensionName}-diag-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Run Diagnostics</button>
-                        <button id="${extensionName}-show-logs" class="menu_button" style="font-size: 9px; padding: 2px 10px;">View Logs</button>
+                        <button id="${extensionName}-diag-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Diagnostics</button>
+                        <button id="${extensionName}-test-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Test Last</button>
+                        <button id="${extensionName}-show-logs" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Logs</button>
                     </div>
 
                     <div class="flex-container">
@@ -272,18 +298,28 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.4.2-final</span>
+                        <span>v1.4.4-ST117</span>
                     </div>
                 </div>
             </div>
         </div>
     `;
 
-    const $container = $('#extensions_settings').length ? $('#extensions_settings') : $('#extension_settings');
+    const $container = $('#extensions_settings').length ? $('#extensions_settings') : 
+                       ($('#extension_settings').length ? $('#extension_settings') : 
+                       ($('#extensions-settings').length ? $('#extensions-settings') : $('#extension-settings')));
     
     if ($container.length) {
         $container.append(html);
-        azLog("UI appended to settings panel.");
+        azLog(`UI appended to ${$container.attr('id')}`);
+
+        $(`#${extensionName}-test-btn`).on('click', () => {
+            const chat = context.chat || [];
+            if (chat.length > 0) {
+                azLog("Manual Test Triggered");
+                onMessageReceived(chat.length - 1);
+            }
+        });
 
         $(`#${extensionName}-enabled`).on('change', function() {
             settings.enabled = !!$(this).prop('checked');
@@ -407,6 +443,7 @@ export async function onActivate() {
     // Listen to multiple event types to ensure capture
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
+    eventSource.on(event_types.MESSAGE_UPDATED, onMessageReceived); // Added for safety
 
     // Register Log Command
     try {
@@ -418,6 +455,7 @@ export async function onActivate() {
                     const output = logs.join("\n") || "Logs are empty. Is the extension enabled?";
                     if (Popup) {
                         Popup.show.text("Azaria Debug Logs", output);
+                        return "Opening log popup...";
                     } else {
                         return output;
                     }
