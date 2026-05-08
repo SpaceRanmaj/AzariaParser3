@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.3.6
+ * Azaria Style Harmonizer v1.3.7
  * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
  */
 
@@ -13,6 +13,9 @@ const defaultSettings = {
     mode: "external", 
     selectedProfile: "current", 
     backendUrl: "REPLACE_ME",
+    directApiKey: "",
+    directModel: "gemini-2.0-flash",
+    directTemp: 0.7,
     directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
     systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
     presets: [
@@ -38,11 +41,13 @@ async function onMessageReceived(messageId) {
 
     let refined;
     try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 30000));
         
         if (settings.mode === "external") {
+            console.log("[AZARIA] Requesting external refinement...");
             refined = await Promise.race([harmonizeExternal(message.mes), timeoutPromise]);
         } else {
+            console.log("[AZARIA] Requesting internal refinement...");
             refined = await Promise.race([harmonizeInternal(message.mes), timeoutPromise]);
         }
     } catch (e) {
@@ -57,15 +62,20 @@ async function onMessageReceived(messageId) {
 }
 
 async function harmonizeExternal(text) {
+    const payload = {
+        sourceText: text,
+        styleDirectives: settings.directives,
+        systemInstructionOverride: settings.systemInstruction,
+        apiKey: settings.directApiKey,
+        modelName: settings.directModel,
+        temperature: settings.directTemp
+    };
+
     try {
         const response = await fetch(`${settings.backendUrl}/api/harmonize`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                sourceText: text,
-                styleDirectives: settings.directives,
-                systemInstructionOverride: settings.systemInstruction
-            })
+            body: JSON.stringify(payload)
         });
         const data = await response.json();
         return data.refinedText || text;
@@ -159,6 +169,23 @@ async function buildUI() {
                             <option value="internal" ${settings.mode === 'internal' ? 'selected' : ''}>ST Connection Profile</option>
                         </select>
                     </div>
+
+                    <div id="${extensionName}-direct-config" style="display: ${settings.mode === 'external' ? 'block' : 'none'}; margin-top: 5px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                        <div style="font-size: 10px; margin-bottom: 5px;">
+                            <span>API Key (Optional):</span>
+                            <input type="password" id="${extensionName}-api-key" value="${settings.directApiKey || ''}" style="width: 100%; font-size: 9px;">
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <div style="flex: 1;">
+                                <span style="font-size: 9px;">Model:</span>
+                                <input type="text" id="${extensionName}-direct-model" value="${settings.directModel || 'gemini-2.0-flash'}" style="width: 100%; font-size: 9px;">
+                            </div>
+                            <div style="width: 50px;">
+                                <span style="font-size: 9px;">Temp:</span>
+                                <input type="number" id="${extensionName}-direct-temp" value="${settings.directTemp || 0.7}" step="0.1" style="width: 100%; font-size: 9px;">
+                            </div>
+                        </div>
+                    </div>
                     
                     <div id="${extensionName}-internal-config" style="display: ${settings.mode === 'internal' ? 'block' : 'none'}; margin-top: 5px; font-size: 10px; color: var(--gold);">
                         <div class="flex-container">
@@ -167,6 +194,7 @@ async function buildUI() {
                                 <option value="current" ${settings.selectedProfile === 'current' ? 'selected' : ''}>[Active Profile]</option>
                                 ${profileOptions}
                             </select>
+                            <button id="${extensionName}-refresh-profiles" class="menu_button fa-solid fa-rotate" style="margin-left: 5px; padding: 2px 4px; font-size: 8px;"></button>
                         </div>
                     </div>
 
@@ -191,7 +219,7 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.3.6-mod</span>
+                        <span>v1.3.7-mod</span>
                     </div>
                 </div>
             </div>
@@ -214,12 +242,43 @@ async function buildUI() {
         $(`#${extensionName}-mode`).on('change', function() {
             settings.mode = $(this).val();
             $(`#${extensionName}-internal-config`).toggle(settings.mode === 'internal');
+            $(`#${extensionName}-direct-config`).toggle(settings.mode === 'external');
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-api-key`).on('input', function() {
+            settings.directApiKey = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-direct-model`).on('input', function() {
+            settings.directModel = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-direct-temp`).on('input', function() {
+            settings.directTemp = parseFloat($(this).val());
             saveSettingsDebounced();
         });
 
         $(`#${extensionName}-profile-select`).on('change', function() {
             settings.selectedProfile = $(this).val();
             saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-refresh-profiles`).on('click', function() {
+            const profiles = getProfiles();
+            const $select = $(`#${extensionName}-profile-select`);
+            const current = $select.val();
+            $select.empty();
+            $select.append(`<option value="current" ${current === 'current' ? 'selected' : ''}>[Active Profile]</option>`);
+            profiles.forEach(p => {
+                const name = typeof p === 'string' ? p : p.name;
+                if (name) {
+                    $select.append(`<option value="${name}" ${current === name ? 'selected' : ''}>${name}</option>`);
+                }
+            });
+            context.callToast("Profiles refreshed", "info");
         });
 
         $(`#${extensionName}-instruction`).on('input', function() {

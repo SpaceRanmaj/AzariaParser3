@@ -19,7 +19,16 @@ async function startServer() {
   // API Endpoint for Harmonization
   app.post("/api/harmonize", async (req, res) => {
     try {
-      const { sourceText, styleDirectives, characterProfile, chatHistory, systemInstructionOverride } = req.body;
+      const { 
+        sourceText, 
+        styleDirectives, 
+        characterProfile, 
+        chatHistory, 
+        systemInstructionOverride,
+        apiKey,
+        modelName,
+        temperature
+      } = req.body;
       
       if (!sourceText) {
         return res.status(400).json({ error: "Source text is required" });
@@ -30,7 +39,10 @@ async function startServer() {
         styleDirectives,
         characterProfile,
         chatHistory,
-        systemInstructionOverride
+        systemInstructionOverride,
+        apiKey,
+        modelName,
+        temperature
       });
 
       res.json({ refinedText });

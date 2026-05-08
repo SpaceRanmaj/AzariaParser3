@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenAI(process.env.GEMINI_API_KEY || "");
 
 export interface HarmonizeParams {
   sourceText: string;
@@ -8,51 +8,58 @@ export interface HarmonizeParams {
   chatHistory?: string;
   characterProfile?: string;
   systemInstructionOverride?: string;
+  apiKey?: string; // Optional user key override
+  modelName?: string;
+  temperature?: number;
 }
 
 export async function harmonizeOutput(params: HarmonizeParams): Promise<string> {
-  const { sourceText, styleDirectives, chatHistory, characterProfile, systemInstructionOverride } = params;
+  const { 
+    sourceText, 
+    styleDirectives, 
+    chatHistory, 
+    characterProfile, 
+    systemInstructionOverride,
+    apiKey,
+    modelName = "gemini-2.0-flash",
+    temperature = 0.7
+  } = params;
 
-  const defaultSystemInstruction = `
-    You are an expert Output Parser and Stylistic Harmonizer for Roleplay.
-    Your task is to rewrite the provided text to match specific stylistic directives.
-    
-    CRITICAL RULES:
-    1. Preserve the original INTENT and MEANING perfectly.
-    2. Do NOT add new plot points or actions unless they are purely stylistic flavor.
-    3. Remove cliches, generic "AI-isms", forbidden words and phrases.
-    4. Follow the Style Directives strictly.
-    5. If Chat History is provided, ensure consistency and avoid repeating exact phrases or sentence structures used recently.
-    
-    STYLE DIRECTIVES:
-    ${styleDirectives}
-    
-    ${characterProfile ? `CHARACTER PROFILE:\n${characterProfile}` : ""}
-    
-    Provide ONLY the rewritten text. No preamble, no commentary.
-  `;
-
-  const systemInstruction = systemInstructionOverride || defaultSystemInstruction;
+  // Use override key if provided, otherwise default
+  const client = apiKey ? new GoogleGenAI(apiKey) : ai;
+  const model = client.getGenerativeModel({ 
+    model: modelName,
+    systemInstruction: systemInstructionOverride || `
+      You are an expert Output Parser and Stylistic Harmonizer for Roleplay.
+      Your task is to rewrite the provided text to match specific stylistic directives.
+      
+      RULES:
+      1. Preserve original INTENT and MEANING perfectly.
+      2. Do NOT add new plot points or meta-commentary.
+      3. Follow Style Directives strictly.
+      4. Avoid repetitive sentence structures.
+      
+      STYLE DIRECTIVES:
+      ${styleDirectives}
+      
+      ${characterProfile ? `CHARACTER PROFILE:\n${characterProfile}` : ""}
+      
+      Provide ONLY the rewritten text.
+    `
+  });
 
   const prompt = `
-    ${chatHistory ? `RECENT CHAT CONTEXT:\n${chatHistory}\n\n` : ""}
-    TEXT TO HARMONIZE:
+    ${chatHistory ? `RECENT CONTEXT:\n${chatHistory}\n\n` : ""}
+    TEXT TO REWRITE:
     "${sourceText}"
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
-    });
-
-    return response.text || sourceText;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text() || sourceText;
   } catch (error) {
-    console.error("Harmonizer Error:", error);
-    return sourceText; // Fallback to original
+    console.error("[AZARIA] Refinement Logic Failed:", error);
+    return sourceText;
   }
 }
