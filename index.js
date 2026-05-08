@@ -1,24 +1,28 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.1
- * Refined for ST 1.17+ with internal logging.
+ * Azaria Style Harmonizer v1.4.2
+ * Refined for ST 1.17+ with Popup Logging and Diagnostics.
  */
 
 const extensionName = "azaria-style-harmonizer";
-const logs = [];
+let logs = [];
 
 function azLog(msg, type = "info") {
-    const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    const time = new Date().toLocaleTimeString();
+    const entry = `[${time}] ${msg}`;
     logs.push(entry);
-    if (logs.length > 50) logs.shift();
+    if (logs.length > 100) logs.shift();
     console.log(`[AZARIA] ${msg}`);
 }
+
+// Ensure logs are visible globally for extreme debugging
+globalThis.AZARIA_LOGS = logs;
 
 // Global Interceptor
 globalThis.azariaStyleInterceptor = async function(chat, contextSize, abort, type) {
     if (!settings?.enabled) return;
-    azLog(`Interceptor fired: ${type}`);
+    azLog(`Interceptor activity detected: ${type}`);
 };
 
 // Default Configuration
@@ -199,6 +203,11 @@ async function buildUI() {
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
                 </div>
                 <div class="inline-drawer-content" style="display: none; padding: 10px; border: 1px dashed var(--black30);">
+                    <div class="flex-container" style="justify-content: space-between; margin-bottom: 10px;">
+                        <button id="${extensionName}-diag-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Run Diagnostics</button>
+                        <button id="${extensionName}-show-logs" class="menu_button" style="font-size: 9px; padding: 2px 10px;">View Logs</button>
+                    </div>
+
                     <div class="flex-container">
                         <label>
                             <input type="checkbox" id="${extensionName}-enabled" ${settings.enabled ? 'checked' : ''}>
@@ -263,7 +272,7 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.4.1-log</span>
+                        <span>v1.4.2-final</span>
                     </div>
                 </div>
             </div>
@@ -308,7 +317,29 @@ async function buildUI() {
             saveSettingsDebounced();
         });
 
-        $(`#${extensionName}-refresh-profiles`).on('click', function() {
+        $(`#${extensionName}-show-logs`).on('click', () => {
+            const { Popup } = SillyTavern.getContext();
+            Popup.show.text("Azaria Engine Logs", logs.join("\n") || "No logs yet.");
+        });
+
+        $(`#${extensionName}-diag-btn`).on('click', async () => {
+            azLog("Starting Diagnostic Scan...");
+            context.callToast("Diagnostics running...", "info");
+            
+            try {
+                const response = await fetch(`${settings.backendUrl}/api/harmonize`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sourceText: "TEST", styleDirectives: "REWRITE AS 'OK'" })
+                });
+                const data = await response.json();
+                azLog(`External API Test: ${data.refinedText === 'OK' ? 'PASS' : 'FAIL (Unexpected result)'}`);
+                context.callToast("Diagnostic: Connection OK", "success");
+            } catch (e) {
+                azLog(`External API Test: FAIL (${e.message})`);
+                context.callToast("Diagnostic: Connection Failed", "error");
+            }
+        });
             const freshProfiles = getProfiles();
             const $select = $(`#${extensionName}-profile-select`);
             const current = $select.val();
@@ -377,22 +408,27 @@ export async function onActivate() {
 
     // Register Log Command
     try {
-        const { SlashCommandParser, SlashCommand } = context;
+        const { SlashCommandParser, SlashCommand, Popup } = context;
         if (SlashCommandParser) {
             SlashCommandParser.addCommandObject(SlashCommand.fromProps({
                 name: 'azlog',
                 callback: () => {
-                    const output = "--- AZARIA DEBUG LOGS ---\n" + logs.join("\n");
-                    return output;
+                    const output = logs.join("\n") || "Logs are empty. Is the extension enabled?";
+                    if (Popup) {
+                        Popup.show.text("Azaria Debug Logs", output);
+                    } else {
+                        return output;
+                    }
                 },
-                helpString: 'Displays the Azaria Style Engine execution logs.',
+                helpString: 'Displays the Azaria Style Engine execution logs in a popup.',
             }));
             
             SlashCommandParser.addCommandObject(SlashCommand.fromProps({
                 name: 'azaria',
                 callback: () => {
                     const status = settings.enabled ? "ACTIVE" : "DISABLED";
-                    return `Azaria Style Engine Status: ${status}\nLogs: Use /azlog to view details.`;
+                    const mode = settings.mode;
+                    return `Azaria Style Engine Status: ${status}\nMode: ${mode}\nUse /azlog for detailed internals.`;
                 },
                 helpString: 'Check engine status.',
             }));
