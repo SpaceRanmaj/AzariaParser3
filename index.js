@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.9
- * Refined for ST 1.17+ with robust Origin handling.
+ * Azaria Style Harmonizer v1.5.0
+ * Refined for ST 1.17+ with direct Gemini API support.
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -159,6 +159,45 @@ async function harmonizeExternal(text) {
     const character = context.characters?.[context.character_id];
     const profile = settings.characterProfile || character?.description || character?.personality || "";
 
+    // If we have a direct API key, prefer hitting Google directly to avoid proxy overhead/CORS
+    if (settings.directApiKey) {
+        azLog("Using Direct Gemini API Access...");
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.directModel}:generateContent?key=${settings.directApiKey}`;
+            const prompt = `${settings.systemInstruction}
+
+Character Context:
+${profile}
+
+Style Directives:
+${settings.directives}
+
+Text to harmonize:
+"${text}"`;
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: settings.directTemp }
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const refined = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (refined) return refined.trim().replace(/^"|"$/g, '');
+        } catch (error) {
+            azLog(`Direct Gemini Failed: ${error.message}. Falling back...`);
+        }
+    }
+
+    // Proxy Fallback
     const payload = {
         sourceText: text,
         styleDirectives: settings.directives,
@@ -169,7 +208,7 @@ async function harmonizeExternal(text) {
         temperature: settings.directTemp
     };
 
-    azLog(`Hitting: ${settings.backendUrl}/api/harmonize`);
+    azLog(`Hitting Proxy: ${settings.backendUrl}/api/harmonize`);
 
     try {
         const response = await fetch(`${settings.backendUrl}/api/harmonize`, {
@@ -185,10 +224,10 @@ async function harmonizeExternal(text) {
         const data = await response.json();
         return data.refinedText || text;
     } catch (error) {
-        azLog(`External API failed: ${error.message}`);
+        azLog(`Proxy API failed: ${error.message}`);
         // If it's a TypeError and the URL is REPLACE_ME, it's definitely a config issue
         if (settings.backendUrl === "REPLACE_ME") {
-            safeToast("Backend URL not configured. Click 'Sync' in settings.", "error");
+            safeToast("Engine not ready. Provide API Key or Sync URL.", "error");
         }
         return text;
     }
@@ -343,9 +382,9 @@ async function buildUI() {
                     </div>
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
-                        <span id="${extensionName}-sync-url-display">SYNC_URL: ${settings.backendUrl}</span>
-                        <span style="color: var(--gold); margin-top: 2px;">ENGINE_URL (Connect to this): ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.4.9-LIVE</span>
+                        <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
+                        <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
+                        <span style="align-self: flex-end;">v1.5.0-BRUTALIST</span>
                     </div>
                 </div>
             </div>
