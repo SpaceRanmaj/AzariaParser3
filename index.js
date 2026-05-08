@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.2
+ * Azaria Style Harmonizer v1.4.3
  * Refined for ST 1.17+ with Popup Logging and Diagnostics.
  */
 
@@ -340,6 +340,8 @@ async function buildUI() {
                 context.callToast("Diagnostic: Connection Failed", "error");
             }
         });
+
+        $(`#${extensionName}-refresh-profiles`).on('click', function() {
             const freshProfiles = getProfiles();
             const $select = $(`#${extensionName}-profile-select`);
             const current = $select.val();
