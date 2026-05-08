@@ -13,7 +13,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
+  // Enable CORS for all origins, methods, and headers
+  app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+  }));
   app.use(express.json());
 
   // API Endpoint for Harmonization
@@ -73,7 +78,9 @@ async function startServer() {
       const host = req.get("host");
       const currentUrl = `${protocol}://${host}`;
       
+      // Update both the default and the version marker
       content = content.replace(/backendUrl:\s*["']REPLACE_ME["']/g, `backendUrl: "${currentUrl}"`);
+      content = content.replace(/v\d+\.\d+\.\d+-ST\d+/g, `v1.4.6-LIVE`);
       
       res.send(content);
     } catch (e) {

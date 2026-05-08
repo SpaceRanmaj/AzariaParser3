@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.4
+ * Azaria Style Harmonizer v1.4.6
  * Refined for ST 1.17+ with Popup Logging and Diagnostics.
  */
 
@@ -47,6 +47,7 @@ const defaultSettings = {
     mode: "external", 
     selectedProfile: "current", 
     backendUrl: "REPLACE_ME",
+    characterProfile: "",
     directApiKey: "",
     directModel: "gemini-3-flash-preview",
     directTemp: 0.7,
@@ -151,14 +152,22 @@ async function onMessageReceived(data) {
 }
 
 async function harmonizeExternal(text) {
+    // Determine the char profile if available
+    const context = SillyTavern.getContext();
+    const character = context.characters?.[context.character_id];
+    const profile = settings.characterProfile || character?.description || character?.personality || "";
+
     const payload = {
         sourceText: text,
         styleDirectives: settings.directives,
         systemInstructionOverride: settings.systemInstruction,
+        characterProfile: profile,
         apiKey: settings.directApiKey,
         modelName: settings.directModel,
         temperature: settings.directTemp
     };
+
+    azLog(`Hitting: ${settings.backendUrl}/api/harmonize`);
 
     try {
         const response = await fetch(`${settings.backendUrl}/api/harmonize`, {
@@ -166,10 +175,19 @@ async function harmonizeExternal(text) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
         return data.refinedText || text;
     } catch (error) {
         azLog(`External API failed: ${error.message}`);
+        // If it's a TypeError and the URL is REPLACE_ME, it's definitely a config issue
+        if (settings.backendUrl === "REPLACE_ME") {
+            safeToast("Backend URL not configured. Click 'Sync' in settings.", "error");
+        }
         return text;
     }
 }
@@ -249,9 +267,10 @@ async function buildUI() {
                 </div>
                 <div class="inline-drawer-content" style="display: none; padding: 10px; border: 1px dashed var(--black30);">
                     <div class="flex-container" style="justify-content: space-between; margin-bottom: 10px;">
-                        <button id="${extensionName}-diag-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Diagnostics</button>
-                        <button id="${extensionName}-test-btn" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Test Last</button>
-                        <button id="${extensionName}-show-logs" class="menu_button" style="font-size: 9px; padding: 2px 10px;">Logs</button>
+                        <button id="${extensionName}-diag-btn" class="menu_button" title="Test Connection" style="font-size: 9px; padding: 2px 10px;">Diagnostics</button>
+                        <button id="${extensionName}-sync-btn" class="menu_button" title="Update Sync URL" style="font-size: 9px; padding: 2px 10px;">Sync URL</button>
+                        <button id="${extensionName}-test-btn" class="menu_button" title="Reprocess Last Message" style="font-size: 9px; padding: 2px 10px;">Test Last</button>
+                        <button id="${extensionName}-show-logs" class="menu_button" title="View Debug Logs" style="font-size: 9px; padding: 2px 10px;">Logs</button>
                     </div>
 
                     <div class="flex-container">
@@ -298,6 +317,11 @@ async function buildUI() {
                     </div>
 
                     <div style="margin-top: 10px;">
+                        <span style="font-size: 10px; opacity: 0.8;">Character Profile Override (Leave empty to auto-detect):</span>
+                        <textarea id="${extensionName}-char-profile" style="width: 100%; height: 50px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.characterProfile || ''}</textarea>
+                    </div>
+
+                    <div style="margin-top: 10px;">
                         <span style="font-size: 10px; opacity: 0.8;">System Instruction:</span>
                         <textarea id="${extensionName}-instruction" style="width: 100%; height: 50px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.systemInstruction}</textarea>
                     </div>
@@ -316,9 +340,9 @@ async function buildUI() {
                         <button id="${extensionName}-save-preset" class="menu_button" style="padding: 2px 8px;">Save</button>
                     </div>
                     
-                    <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
-                        <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.4.4-ST117</span>
+                    <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column;">
+                        <span id="${extensionName}-sync-url-display">SYNC_URL: ${settings.backendUrl}</span>
+                        <span style="align-self: flex-end;">v1.4.6-mod</span>
                     </div>
                 </div>
             </div>
@@ -339,6 +363,35 @@ async function buildUI() {
                 azLog("Manual Test Triggered");
                 onMessageReceived(chat.length - 1);
             }
+        });
+
+        $(`#${extensionName}-sync-btn`).on('click', () => {
+            let scriptUrl = "";
+            try {
+                // Try to find the script URL
+                const script = document.querySelector(`script[src*="${extensionName}"]`) || document.currentScript;
+                if (script && script.src) {
+                    scriptUrl = new URL(script.src).origin;
+                }
+            } catch (e) {
+                azLog("Could not determine script origin automatically.");
+            }
+
+            const fallbackUrl = scriptUrl || window.location.origin;
+            const newUrl = prompt("Enter Azaria Backend URL (autodetected below):", fallbackUrl);
+            
+            if (newUrl) {
+                settings.backendUrl = newUrl.replace(/\/$/, ""); // Remove trailing slash
+                $(`#${extensionName}-sync-url-display`).text(`SYNC_URL: ${settings.backendUrl}`);
+                saveSettingsDebounced();
+                safeToast("Sync URL updated", "success");
+                azLog(`Sync URL set to: ${settings.backendUrl}`);
+            }
+        });
+
+        $(`#${extensionName}-char-profile`).on('input', function() {
+            settings.characterProfile = $(this).val();
+            saveSettingsDebounced();
         });
 
         $(`#${extensionName}-enabled`).on('change', function() {
