@@ -127,11 +127,11 @@ export default function App() {
                 
                 <section>
                   <h3 className="font-bold text-az-text mb-2">02. INSTALLATION (SILVER_BULLET)</h3>
-                  <p className="opacity-70 mb-2 font-medium">SillyTavern 1.12+ makes installation trivial:</p>
+                  <p className="opacity-70 mb-2 font-medium">SillyTavern now supports installing extensions directly from root manifests:</p>
                   <div className="bg-black/30 p-4 rounded font-mono text-xs break-all mb-4 border border-az-orange/30 flex items-center justify-between gap-2">
-                    <span className="text-az-orange">{window.location.origin}/manifest.json</span>
+                    <span className="text-az-orange">{window.location.origin}</span>
                     <button 
-                      onClick={() => navigator.clipboard.writeText(`${window.location.origin}/manifest.json`)}
+                      onClick={() => navigator.clipboard.writeText(window.location.origin)}
                       className="px-2 py-1 bg-az-orange/10 hover:bg-az-orange/20 rounded border border-az-orange/30 transition-colors"
                     >
                       COPY
@@ -140,9 +140,8 @@ export default function App() {
                   <ul className="list-decimal list-inside space-y-3 opacity-80 decoration-az-orange">
                     <li>In SillyTavern, open the <strong>Extensions</strong> (puzzle icon) menu.</li>
                     <li>Select <strong>Install Extension</strong>.</li>
-                    <li>Paste the URL above and hit <strong>Install</strong>.</li>
-                    <li><strong>CRITICAL:</strong> After installation, click <strong>Manage Extensions</strong> and ensure "Azaria Style Harmonizer" is checked. Then refresh your browser.</li>
-                    <li>Confused? Look at the very top of the extension list for the orange 'Azaria' block.</li>
+                    <li>Paste the Base URL above and hit <strong>Install</strong>.</li>
+                    <li>The engine will detect <code>manifest.json</code> automatically and initialize.</li>
                   </ul>
                 </section>
 

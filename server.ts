@@ -42,6 +42,14 @@ async function startServer() {
   // Serve SillyTavern Extension files explicitly if needed, 
   // but they will also be handled by Vite/Static middleware.
   
+  // Serving SillyTavern extension files from root
+  app.get("/manifest.json", (req, res) => {
+    res.sendFile(path.join(__dirname, "manifest.json"));
+  });
+  app.get("/index.js", (req, res) => {
+    res.sendFile(path.join(__dirname, "index.js"));
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

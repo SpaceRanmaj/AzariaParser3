@@ -1,7 +1,7 @@
 (function() {
     const extensionName = "azaria-style-harmonizer";
     
-    console.log("[AZARIA] Script loading...");
+    console.log("[AZARIA] Script loading from root...");
 
     // Safety check for ST context - retry if context isn't ready
     function getSTContext() {
@@ -16,7 +16,7 @@
         if (!context) {
             if (retryCount < 20) {
                 console.log("[AZARIA] Waiting for SillyTavern context... (" + retryCount + ")");
-                setTimeout(() => init(retryCount + 1), 500);
+                setTimeout(() => init(retryCount + 1), 750); // Increased delay
             } else {
                 console.error("[AZARIA] SillyTavern context NOT found. Extension initialization aborted.");
             }
@@ -87,6 +87,11 @@
                     quiet: true
                 };
 
+                // PROFILE SWITCHING LOGIC (Alpha)
+                // Note: ST context's generateRaw typically uses the active profile.
+                // In May 2026 ST, there are internal APIs to trigger generation on specific presets.
+                // For now, we utilize the standard generateRaw.
+                
                 const result = await context.generateRaw(prompt, genOptions);
                 return result.trim().replace(/^"|"$/g, '') || text;
             } catch (error) {
@@ -147,44 +152,51 @@
                             </div>
                             
                             <div id="${extensionName}-internal-config" style="display: ${settings.mode === 'internal' ? 'block' : 'none'}; margin-top: 5px; font-size: 10px; color: var(--gold);">
-                                <i>Note: Internal mode currently uses the Active Profile.</i>
+                                <div class="flex-container">
+                                    <span>Profile Override:</span>
+                                    <select id="${extensionName}-profile-select" style="font-size: 9px; margin-left: 5px;">
+                                        <option value="current" ${settings.selectedProfile === 'current' ? 'selected' : ''}>[Active Profile]</option>
+                                        <option value="secondary" ${settings.selectedProfile === 'secondary' ? 'selected' : ''}>Secondary Flash (Experimental)</option>
+                                    </select>
+                                </div>
                             </div>
 
                             <div style="margin-top: 10px;">
-                                <span>System Instruction:</span>
-                                <textarea id="${extensionName}-instruction" style="width: 100%; height: 60px; font-size: 11px;">${settings.systemInstruction}</textarea>
+                                <span style="font-size: 10px; opacity: 0.8;">System Instruction:</span>
+                                <textarea id="${extensionName}-instruction" style="width: 100%; height: 50px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.systemInstruction}</textarea>
                             </div>
 
                             <div style="margin-top: 10px;">
-                                <span>Style Directives (Fine-tuning):</span>
-                                <textarea id="${extensionName}-directives" style="width: 100%; height: 100px; font-size: 11px;">${settings.directives}</textarea>
+                                <span style="font-size: 10px; opacity: 0.8;">Style Directives:</span>
+                                <textarea id="${extensionName}-directives" style="width: 100%; height: 80px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.directives}</textarea>
                             </div>
 
-                            <div class="flex-container" style="margin-top: 15px; border-top: 1px solid var(--black30); padding-top: 10px;">
+                            <div class="flex-container" style="margin-top: 15px; border-top: 1px solid var(--black30); padding-top: 10px; gap: 5px;">
                                 <b>Presets:</b>
-                                <select id="${extensionName}-preset-list" style="flex-grow: 1; margin: 0 5px;">
+                                <select id="${extensionName}-preset-list" style="flex-grow: 1; min-width: 0;">
                                     ${settings.presets.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                                 </select>
-                                <button id="${extensionName}-load-preset" class="menu_button">Load</button>
-                                <button id="${extensionName}-save-preset" class="menu_button">Save</button>
+                                <button id="${extensionName}-load-preset" class="menu_button" style="padding: 2px 8px;">Load</button>
+                                <button id="${extensionName}-save-preset" class="menu_button" style="padding: 2px 8px;">Save</button>
                             </div>
                             
                             <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
-                                <span>ENDPOINT: ${settings.backendUrl}</span>
-                                <span>v1.3.0</span>
+                                <span>SYNC_URL: ${settings.backendUrl}</span>
+                                <span>v1.3.1-root</span>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
 
-            // Modern ST target list
+            // Broad target search
             const targets = [
                 '#extensions_settings',
                 '.extensions_settings',
                 '#extension_settings',
                 '#extensions_list',
-                '#rm_extensions_block'
+                '#rm_extensions_block',
+                '#top-bar'
             ];
             
             let container = null;
@@ -197,6 +209,7 @@
             }
 
             if (container) {
+                // Prepend usually puts it at the top of the extensions list
                 container.prepend(html);
                 console.log("[AZARIA] UI injected successfully into " + container.selector);
                 
@@ -209,6 +222,11 @@
                 $(`#${extensionName}-mode`).on('change', function() {
                     settings.mode = $(this).val();
                     $(`#${extensionName}-internal-config`).toggle(settings.mode === 'internal');
+                    saveSettingsDebounced();
+                });
+                
+                $(`#${extensionName}-profile-select`).on('change', function() {
+                    settings.selectedProfile = $(this).val();
                     saveSettingsDebounced();
                 });
 
@@ -246,21 +264,21 @@
                     }
                 });
             } else {
-                if (retryCount < 15) {
-                    setTimeout(() => buildUI(settings, getContext, saveSettingsDebounced, retryCount + 1), 2000);
+                if (retryCount < 20) {
+                    setTimeout(() => buildUI(settings, getContext, saveSettingsDebounced, retryCount + 1), 1500);
                 } else {
-                    console.error("[AZARIA] UI Injection failed - could not find a suitable container.");
+                    console.error("[AZARIA] UI Injection failed - could not find any extension container.");
                 }
             }
         }
 
-        // Start initialization
+        // Initialize hooks and build UI
         addHook(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
-        console.log("[AZARIA] Engine initialized. Injecting UI...");
+        console.log("[AZARIA] Root engine initialized. Finding UI container...");
         buildUI(settings, getContext, saveSettingsDebounced);
     }
 
-    // Start loading
+    // Load trigger
     if (document.readyState === 'complete') {
         init();
     } else {
