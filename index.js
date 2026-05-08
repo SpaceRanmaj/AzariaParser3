@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.3.5
+ * Azaria Style Harmonizer v1.3.6
  * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
  */
 
@@ -12,7 +12,7 @@ const defaultSettings = {
     enabled: true,
     mode: "external", 
     selectedProfile: "current", 
-    backendUrl: "https://" + window.location.host,
+    backendUrl: "REPLACE_ME",
     directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
     systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
     presets: [
@@ -77,13 +77,28 @@ async function harmonizeExternal(text) {
 
 async function harmonizeInternal(text) {
     const context = SillyTavern.getContext();
+    const { generateQuietPrompt } = context;
+    
+    // Fallback if generateQuietPrompt is missing
+    const generator = generateQuietPrompt || context.generateRaw;
+    
+    if (!generator) {
+        console.error("[AZARIA] No generation function found in context.");
+        return text;
+    }
+
     const prompt = `${settings.systemInstruction}\n\nSTYLE DIRECTIVES:\n${settings.directives}\n\nTEXT TO REWRITE:\n"${text}"\n\nREWRITTEN TEXT:`;
     
     try {
-        const result = await context.generateRaw({
+        // Prepare generation options
+        const options = {
             prompt: prompt,
-            quiet: true
-        });
+            quiet: true,
+            // Try to use the selected profile if it's not "current"
+            ...(settings.selectedProfile !== 'current' ? { api_preset: settings.selectedProfile } : {})
+        };
+
+        const result = await generator(options);
         return result.trim().replace(/^"|"$/g, '') || text;
     } catch (error) {
         console.error("[AZARIA] Internal ST Backend failed:", error);
@@ -106,10 +121,21 @@ async function buildUI() {
     }
     settings = extensionSettings[extensionName];
 
-    // Profile handling
-    const ctxSettings = context.settings || {};
-    const profiles = ctxSettings.api_presets || window.SillyTavern?.api_presets || [];
-    const profileOptions = profiles.map(p => `<option value="${p.name || p}" ${settings.selectedProfile === (p.name || p) ? 'selected' : ''}>${p.name || p}</option>`).join('');
+    // Profile handling - expanded search for ST 1.17
+    const getProfiles = () => {
+        const ctxSettings = context.settings || {};
+        return ctxSettings.api_presets || 
+               window.SillyTavern?.api_presets || 
+               context.api_presets || 
+               [];
+    };
+
+    const profiles = getProfiles();
+    const profileOptions = profiles.map(p => {
+        const name = typeof p === 'string' ? p : p.name;
+        if (!name) return '';
+        return `<option value="${name}" ${settings.selectedProfile === name ? 'selected' : ''}>${name}</option>`;
+    }).join('');
 
     const html = `
         <div id="${extensionName}-settings" class="azaria-extension-panel">
@@ -165,7 +191,7 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.3.5-mod</span>
+                        <span>v1.3.6-mod</span>
                     </div>
                 </div>
             </div>

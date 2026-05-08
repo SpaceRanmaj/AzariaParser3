@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { harmonizeOutput } from "./src/services/geminiService.js";
@@ -47,10 +48,26 @@ async function startServer() {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.sendFile(path.resolve(__dirname, "manifest.json"));
   });
-  app.get("/index.js", (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/javascript");
-    res.sendFile(path.resolve(__dirname, "index.js"));
+  app.get("/index.js", async (req, res) => {
+    try {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "application/javascript");
+      
+      const filePath = path.resolve(__dirname, "index.js");
+      let content = await fs.promises.readFile(filePath, "utf8");
+      
+      // Inject the current server's host as the default backend
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.get("host");
+      const currentUrl = `${protocol}://${host}`;
+      
+      content = content.replace(/backendUrl:\s*["']REPLACE_ME["']/g, `backendUrl: "${currentUrl}"`);
+      
+      res.send(content);
+    } catch (e) {
+      console.error("Error serving index.js:", e);
+      res.status(500).send("Internal Server Error");
+    }
   });
 
   if (process.env.NODE_ENV !== "production") {
