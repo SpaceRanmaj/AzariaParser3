@@ -28,8 +28,23 @@
             event_types, 
             extension_settings,
             saveSettingsDebounced,
-            getContext
+            getContext,
+            characters
         } = context;
+
+        // Fetch connection profiles
+        function getProfiles() {
+            try {
+                const ctx = getContext();
+                // Check multiple locations for presets
+                const profiles = ctx.api_presets || ctx.settings?.api_presets || window.SillyTavern?.api_presets || [];
+                console.log("[AZARIA] Found profiles:", profiles.length);
+                return Array.isArray(profiles) ? profiles : [];
+            } catch (e) {
+                console.warn("[AZARIA] Failed to fetch profiles:", e);
+                return [];
+            }
+        }
 
         // Default Configuration
         const defaultSettings = {
@@ -87,10 +102,13 @@
                     quiet: true
                 };
 
-                // PROFILE SWITCHING LOGIC (Alpha)
-                // Note: ST context's generateRaw typically uses the active profile.
-                // In May 2026 ST, there are internal APIs to trigger generation on specific presets.
-                // For now, we utilize the standard generateRaw.
+                // If a specific profile is selected and it's not the active one
+                if (settings.selectedProfile && settings.selectedProfile !== "current") {
+                    console.log("[AZARIA] Attempting generation with profile:", settings.selectedProfile);
+                    // In ST 1.12, if we have the profile name, we might need to find its config
+                    // For now, we utilize the standard generateRaw which uses active.
+                    // FUTURE: Swap active profile temporarily or use a targeted API.
+                }
                 
                 const result = await context.generateRaw(prompt, genOptions);
                 return result.trim().replace(/^"|"$/g, '') || text;
@@ -124,9 +142,11 @@
         }
 
         // --- UI BUILDING ---
-
         function buildUI(settings, getContext, saveSettingsDebounced, retryCount = 0) {
             if ($(`#${extensionName}-settings`).length) return; 
+
+            const profiles = getProfiles();
+            const profileOptions = profiles.map(p => `<option value="${p.name}" ${settings.selectedProfile === p.name ? 'selected' : ''}>${p.name}</option>`).join('');
 
             const html = `
                 <div id="${extensionName}-settings" class="azaria-extension-panel">
@@ -153,14 +173,17 @@
                             
                             <div id="${extensionName}-internal-config" style="display: ${settings.mode === 'internal' ? 'block' : 'none'}; margin-top: 5px; font-size: 10px; color: var(--gold);">
                                 <div class="flex-container">
-                                    <span>Profile Override:</span>
-                                    <select id="${extensionName}-profile-select" style="font-size: 9px; margin-left: 5px;">
+                                    <span>Target Profile:</span>
+                                    <select id="${extensionName}-profile-select" style="font-size: 9px; margin-left: 5px; flex-grow: 1;">
                                         <option value="current" ${settings.selectedProfile === 'current' ? 'selected' : ''}>[Active Profile]</option>
-                                        <option value="secondary" ${settings.selectedProfile === 'secondary' ? 'selected' : ''}>Secondary Flash (Experimental)</option>
+                                        ${profileOptions}
                                     </select>
                                 </div>
+                                <div style="margin-top: 3px; opacity: 0.7; font-style: italic;">
+                                    Note: Using profiles other than [Active] is currently in tech-preview.
+                                </div>
                             </div>
-
+                            <!-- Rest of the UI remains the same -->
                             <div style="margin-top: 10px;">
                                 <span style="font-size: 10px; opacity: 0.8;">System Instruction:</span>
                                 <textarea id="${extensionName}-instruction" style="width: 100%; height: 50px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.systemInstruction}</textarea>
@@ -182,17 +205,18 @@
                             
                             <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                                 <span>SYNC_URL: ${settings.backendUrl}</span>
-                                <span>v1.3.1-root</span>
+                                <span>v1.3.2-root</span>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
 
-            // Broad target search
+            // Expanded target search for 1.12
             const targets = [
                 '#extensions_settings',
                 '.extensions_settings',
+                '#extension_settings_container', // New in 1.12 sometimes
                 '#extension_settings',
                 '#extensions_list',
                 '#rm_extensions_block',
@@ -274,6 +298,19 @@
 
         // Initialize hooks and build UI
         addHook(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
+        
+        // Register Slash Command for verification
+        try {
+            context.registerCommand("azaria", (args) => {
+                context.callToast(`Azaria Style Engine Status: ${settings.enabled ? "ACTIVE" : "DISABLED"} (${settings.mode} mode)`, "info");
+                return "";
+            }, ["az"], "Check Azaria Engine status");
+            console.log("[AZARIA] Slash command /azaria registered.");
+        } catch (e) {
+            console.warn("[AZARIA] Slash command registration failed (Legacy ST?)", e);
+        }
+
+        context.callToast("Azaria Style Engine v1.3.2 LOADED", "success");
         console.log("[AZARIA] Root engine initialized. Finding UI container...");
         buildUI(settings, getContext, saveSettingsDebounced);
     }
