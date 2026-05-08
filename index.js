@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.3.4
+ * Azaria Style Harmonizer v1.3.5
  * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
  */
 
@@ -16,7 +16,7 @@ const defaultSettings = {
     directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
     systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
     presets: [
-        { id: "default", name: "Default Azaria", directives: "1. Eliminate redundancy.\n2. Cynical wit.", instruction: "" }
+        { id: "default", name: "Default Azaria", directives: "1. Eliminate redundancy.\n2. Cynical wit.", instruction: "You are an expert Output Parser." }
     ]
 };
 
@@ -37,10 +37,17 @@ async function onMessageReceived(messageId) {
     console.log("[AZARIA] Refining message:", messageId);
 
     let refined;
-    if (settings.mode === "external") {
-        refined = await harmonizeExternal(message.mes);
-    } else {
-        refined = await harmonizeInternal(message.mes);
+    try {
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000));
+        
+        if (settings.mode === "external") {
+            refined = await Promise.race([harmonizeExternal(message.mes), timeoutPromise]);
+        } else {
+            refined = await Promise.race([harmonizeInternal(message.mes), timeoutPromise]);
+        }
+    } catch (e) {
+        console.error("[AZARIA] Refinement failed (timeout or error):", e);
+        return;
     }
 
     if (refined && refined !== message.mes) {
@@ -101,8 +108,8 @@ async function buildUI() {
 
     // Profile handling
     const ctxSettings = context.settings || {};
-    const profiles = ctxSettings.api_presets || [];
-    const profileOptions = profiles.map(p => `<option value="${p.name}" ${settings.selectedProfile === p.name ? 'selected' : ''}>${p.name}</option>`).join('');
+    const profiles = ctxSettings.api_presets || window.SillyTavern?.api_presets || [];
+    const profileOptions = profiles.map(p => `<option value="${p.name || p}" ${settings.selectedProfile === (p.name || p) ? 'selected' : ''}>${p.name || p}</option>`).join('');
 
     const html = `
         <div id="${extensionName}-settings" class="azaria-extension-panel">
@@ -146,10 +153,19 @@ async function buildUI() {
                         <span style="font-size: 10px; opacity: 0.8;">Style Directives:</span>
                         <textarea id="${extensionName}-directives" style="width: 100%; height: 80px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.directives}</textarea>
                     </div>
+
+                    <div class="flex-container" style="margin-top: 15px; border-top: 1px solid var(--black30); padding-top: 10px; gap: 5px;">
+                        <b>Presets:</b>
+                        <select id="${extensionName}-preset-list" style="flex-grow: 1; min-width: 0;">
+                            ${(settings.presets || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                        </select>
+                        <button id="${extensionName}-load-preset" class="menu_button" style="padding: 2px 8px;">Load</button>
+                        <button id="${extensionName}-save-preset" class="menu_button" style="padding: 2px 8px;">Save</button>
+                    </div>
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.3.3-mod</span>
+                        <span>v1.3.5-mod</span>
                     </div>
                 </div>
             </div>
@@ -175,6 +191,11 @@ async function buildUI() {
             saveSettingsDebounced();
         });
 
+        $(`#${extensionName}-profile-select`).on('change', function() {
+            settings.selectedProfile = $(this).val();
+            saveSettingsDebounced();
+        });
+
         $(`#${extensionName}-instruction`).on('input', function() {
             settings.systemInstruction = $(this).val();
             saveSettingsDebounced();
@@ -183,6 +204,33 @@ async function buildUI() {
         $(`#${extensionName}-directives`).on('input', function() {
             settings.directives = $(this).val();
             saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-load-preset`).on('click', function() {
+            const id = $(`#${extensionName}-preset-list`).val();
+            const preset = settings.presets.find(p => p.id === id);
+            if (preset) {
+                $(`#${extensionName}-instruction`).val(preset.instruction).trigger('input');
+                $(`#${extensionName}-directives`).val(preset.directives).trigger('input');
+                context.callToast(`Preset "${preset.name}" loaded`, "info");
+            }
+        });
+
+        $(`#${extensionName}-save-preset`).on('click', function() {
+            const name = prompt("Enter preset name:");
+            if (name) {
+                const id = Date.now().toString();
+                settings.presets = settings.presets || [];
+                settings.presets.push({
+                    id,
+                    name,
+                    directives: settings.directives,
+                    instruction: settings.systemInstruction
+                });
+                $(`#${extensionName}-preset-list`).append(`<option value="${id}">${name}</option>`);
+                saveSettingsDebounced();
+                context.callToast(`Preset "${name}" saved`, "success");
+            }
         });
     } else {
         console.warn("[AZARIA] Settings container not found yet. Retrying in 2s.");
