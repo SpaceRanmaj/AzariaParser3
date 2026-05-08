@@ -16,6 +16,22 @@ function azLog(msg, type = "info") {
     console.log(`[AZARIA] ${msg}`);
 }
 
+function safeToast(msg, type = "info") {
+    try {
+        const context = SillyTavern.getContext();
+        // Try context first, then toastr (standard in ST), then fallback to log
+        if (context.callToast) {
+            context.callToast(msg, type);
+        } else if (window.toastr && typeof window.toastr[type] === 'function') {
+            window.toastr[type](msg);
+        } else {
+            azLog(`[Toast Fallback] ${msg}`);
+        }
+    } catch (e) {
+        azLog(`Toast failed: ${e.message}`);
+    }
+}
+
 // Ensure logs are visible globally for extreme debugging
 globalThis.AZARIA_LOGS = logs;
 
@@ -80,17 +96,15 @@ async function onMessageReceived(data) {
         }
 
         if (message.is_user || message.is_system) {
-            azLog(`Skipping: is_user=${message.is_user}, is_system=${message.is_system}`);
             return;
         }
 
         if (message.azaria_processed) {
-            azLog("Message already processed, skipping.");
             return;
         }
 
         azLog(`Refining message: "${message.mes?.substring(0, 30)}..."`);
-        context.callToast("[AZARIA] Harvesting text...", "info");
+        safeToast("[AZARIA] Harvesting text...", "info");
 
         const sourceText = message.mes;
         let refined;
@@ -110,23 +124,29 @@ async function onMessageReceived(data) {
             message.mes = refined;
             message.azaria_processed = true; // Mark to avoid loops
             
+            // Try to sync with backend
             if (context.updateMessageMes && messageIndex !== -1) {
-                context.updateMessageMes(messageIndex, refined);
+                try {
+                    context.updateMessageMes(messageIndex, refined);
+                } catch (e) {
+                    azLog(`Sync failed: ${e.message}`);
+                }
             }
             
-            // Force re-render
+            // Force re-render for mobile clients
             const $msg = $(`[data-id="${messageIndex}"]`).length ? $(`[data-id="${messageIndex}"]`) : $(`.mes[data-id="${messageIndex}"]`);
             if ($msg.length) {
                 const $text = $msg.find('.mes_text');
                 if ($text.length) $text.text(refined);
             }
             
-            context.callToast("[AZARIA] Applied Style Harmonization", "success");
+            safeToast("[AZARIA] Applied Style Harmonization", "success");
         } else {
             azLog("No stylistic variances detected.");
         }
     } catch (e) {
         azLog(`Refinement failure: ${e.message}`, "error");
+        safeToast(`Logic error: ${e.message}`, "error");
     }
 }
 
@@ -355,12 +375,16 @@ async function buildUI() {
 
         $(`#${extensionName}-show-logs`).on('click', () => {
             const { Popup } = SillyTavern.getContext();
-            Popup.show.text("Azaria Engine Logs", logs.join("\n") || "No logs yet.");
+            if (Popup) {
+                Popup.show.text("Azaria Engine Logs", logs.join("\n") || "No logs yet.");
+            } else {
+                alert(logs.join("\n"));
+            }
         });
 
         $(`#${extensionName}-diag-btn`).on('click', async () => {
             azLog("Starting Diagnostic Scan...");
-            context.callToast("Diagnostics running...", "info");
+            safeToast("Diagnostics running...", "info");
             
             try {
                 const response = await fetch(`${settings.backendUrl}/api/harmonize`, {
@@ -370,10 +394,10 @@ async function buildUI() {
                 });
                 const data = await response.json();
                 azLog(`External API Test: ${data.refinedText === 'OK' ? 'PASS' : 'FAIL (Unexpected result)'}`);
-                context.callToast("Diagnostic: Connection OK", "success");
+                safeToast("Diagnostic: Connection OK", "success");
             } catch (e) {
                 azLog(`External API Test: FAIL (${e.message})`);
-                context.callToast("Diagnostic: Connection Failed", "error");
+                safeToast("Diagnostic: Connection Failed", "error");
             }
         });
 
@@ -387,7 +411,7 @@ async function buildUI() {
                 const name = typeof p === 'string' ? p : p.name;
                 if (name) $select.append(`<option value="${name}" ${current === name ? 'selected' : ''}>${name}</option>`);
             });
-            context.callToast("Profiles refreshed", "info");
+            safeToast("Profiles refreshed", "info");
         });
 
         $(`#${extensionName}-instruction`).on('input', function() {
@@ -418,7 +442,7 @@ async function buildUI() {
                 settings.presets.push({ id, name, directives: settings.directives, instruction: settings.systemInstruction });
                 $(`#${extensionName}-preset-list`).append(`<option value="${id}">${name}</option>`);
                 saveSettingsDebounced();
-                context.callToast(`Preset "${name}" saved`, "success");
+                safeToast(`Preset "${name}" saved`, "success");
             }
         });
     } else {
