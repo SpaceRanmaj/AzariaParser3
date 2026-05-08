@@ -52,19 +52,10 @@
         const prompt = `${settings.systemInstruction}\n\nSTYLE DIRECTIVES:\n${settings.directives}\n\nTEXT TO REWRITE:\n"${text}"\n\nREWRITTEN TEXT:`;
         
         try {
-            // If we have a profile override, we have to temporarily swap or use a specific backend call.
-            // For now, let's look for the profile in the ST context.
-            // Note: Modern ST generation handles profile switching usually via global state.
-            // To avoid flickering the UI, we just use the default generateRaw if it's "current".
-            
             const genOptions = {
                 stopped: false,
                 quiet: true
             };
-
-            // If a specific profile is requested, we apply a temporary override if the API allows.
-            // Otherwise, we alert the user that "Current" is safest.
-            
             const result = await window.SillyTavern.getContext().generateRaw(prompt, genOptions);
             return result.trim().replace(/^"|"$/g, '') || text;
         } catch (error) {
@@ -159,7 +150,6 @@
             </div>
         `;
 
-        // Robust insertion logic
         const container = $('#extensions_settings, .extensions_settings, #extension_settings');
         if (container.length) {
             container.append(html);
@@ -202,7 +192,6 @@
             if (preset) {
                 $(`#${extensionName}-instruction`).val(preset.instruction || defaultSettings.systemInstruction).trigger('input');
                 $(`#${extensionName}-directives`).val(preset.directives).trigger('input');
-                addLog && addLog("PRESET_LOADED: " + preset.name);
             }
         });
 
@@ -225,7 +214,7 @@
     function init() {
         addHook(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
         buildUI();
-        console.log("[AZARIA] Style Harmonizer Dashboard v2 Loaded.");
+        console.log("[AZARIA] Style Harmonizer Dashboard v2.2 Loaded.");
     }
 
     init();

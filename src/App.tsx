@@ -130,20 +130,10 @@ export default function App() {
                   <h3 className="font-bold text-az-text mb-2">02. INSTALLATION (MODERN METHOD)</h3>
                   <p className="opacity-70 mb-2">SillyTavern now supports installing extensions directly. Since this is an AI Studio app, you can use the direct manifest URL:</p>
                   <ul className="list-disc list-inside space-y-2 opacity-80 decoration-az-orange">
-                    <li>Copy this URL: <strong className="text-az-orange break-all select-all">{window.location.origin}/manifest.json</strong></li>
+                    <li>Copy this URL: <strong>{window.location.origin}/manifest.json</strong></li>
                     <li>In SillyTavern, go to the <strong>Extensions</strong> (puzzle icon) tab.</li>
                     <li>Click <strong>Install Extension</strong> and paste the manifest URL.</li>
-                    <li><strong>Look for the orange border!</strong> The engine now appends itself to the top of the extensions list.</li>
-                  </ul>
-                </section>
-
-                <section>
-                  <h3 className="font-bold text-az-text mb-2">03. DUAL-MODEL PIPELINE</h3>
-                  <p className="opacity-70">To use a different model for rewriting (e.g. Pro for draft, Flash for rewrite):</p>
-                  <ul className="list-disc list-inside space-y-1 opacity-80">
-                    <li>Set the <strong>Engine Mode</strong> to <strong>Internal</strong> in the Harmonizer settings.</li>
-                    <li>The engine will use your currently selected ST connection profile to refine the text.</li>
-                    <li>(Alpha) Profile switching is currently handled by your active ST session.</li>
+                    <li>The engine will initialize, and you can switch between <strong>External Gemini</strong> or your <strong>Internal ST Connection Profile</strong> via the dropdown.</li>
                   </ul>
                 </section>
 
