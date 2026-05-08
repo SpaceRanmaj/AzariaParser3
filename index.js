@@ -130,15 +130,17 @@ async function onMessageReceived(data) {
                 try {
                     context.updateMessageMes(messageIndex, refined);
                 } catch (e) {
-                    azLog(`Sync failed: ${e.message}`);
+                    azLog(`Sync failed (Expected in some ST versions): ${e.message}`);
                 }
             }
             
-            // Force re-render for mobile clients
+            // Force re-render with better selector
             const $msg = $(`[data-id="${messageIndex}"]`).length ? $(`[data-id="${messageIndex}"]`) : $(`.mes[data-id="${messageIndex}"]`);
             if ($msg.length) {
                 const $text = $msg.find('.mes_text');
-                if ($text.length) $text.text(refined);
+                if ($text.length) {
+                    $text.html(context.substituteParams(refined));
+                }
             }
             
             safeToast("[AZARIA] Applied Style Harmonization", "success");
@@ -340,9 +342,10 @@ async function buildUI() {
                         <button id="${extensionName}-save-preset" class="menu_button" style="padding: 2px 8px;">Save</button>
                     </div>
                     
-                    <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column;">
+                    <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">SYNC_URL: ${settings.backendUrl}</span>
-                        <span style="align-self: flex-end;">v1.4.6-mod</span>
+                        <span style="color: var(--gold); margin-top: 2px;">ENGINE_URL: ${window.location.origin}</span>
+                        <span style="align-self: flex-end;">v1.4.7-LIVE</span>
                     </div>
                 </div>
             </div>
@@ -366,26 +369,15 @@ async function buildUI() {
         });
 
         $(`#${extensionName}-sync-btn`).on('click', () => {
-            let scriptUrl = "";
-            try {
-                // Try to find the script URL
-                const script = document.querySelector(`script[src*="${extensionName}"]`) || document.currentScript;
-                if (script && script.src) {
-                    scriptUrl = new URL(script.src).origin;
-                }
-            } catch (e) {
-                azLog("Could not determine script origin automatically.");
-            }
-
-            const fallbackUrl = scriptUrl || window.location.origin;
-            const newUrl = prompt("Enter Azaria Backend URL (autodetected below):", fallbackUrl);
+            const currentUrl = window.location.origin;
+            const newUrl = prompt(`Enter Azaria Engine URL.\n(Detection suggests: ${currentUrl})`, settings.backendUrl === "REPLACE_ME" ? currentUrl : settings.backendUrl);
             
             if (newUrl) {
-                settings.backendUrl = newUrl.replace(/\/$/, ""); // Remove trailing slash
+                settings.backendUrl = newUrl.replace(/\/$/, "");
                 $(`#${extensionName}-sync-url-display`).text(`SYNC_URL: ${settings.backendUrl}`);
                 saveSettingsDebounced();
-                safeToast("Sync URL updated", "success");
-                azLog(`Sync URL set to: ${settings.backendUrl}`);
+                safeToast("Sync URL Refinement Complete", "success");
+                azLog(`Engine target shifted to: ${settings.backendUrl}`);
             }
         });
 

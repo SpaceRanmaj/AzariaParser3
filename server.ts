@@ -23,6 +23,7 @@ async function startServer() {
 
   // API Endpoint for Harmonization
   app.post("/api/harmonize", async (req, res) => {
+    console.log(`[SERVER] Harmonize request received from: ${req.get('origin') || 'Unknown'}`);
     try {
       const { 
         sourceText, 
