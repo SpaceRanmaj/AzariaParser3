@@ -81,7 +81,10 @@ async function startServer() {
       
       // Update both the default and the version marker
       content = content.replace(/backendUrl:\s*["']REPLACE_ME["']/g, `backendUrl: "${currentUrl}"`);
-      content = content.replace(/v\d+\.\d+\.\d+-ST\d+/g, `v1.4.6-LIVE`);
+      content = content.replace(/v\d+\.\d+\.\d+-mod/g, `v1.4.8-LIVE`);
+      
+      // Inject global origin for UI
+      content = `window.AZARIA_ENGINE_ORIGIN = "${currentUrl}";\n` + content;
       
       res.send(content);
     } catch (e) {

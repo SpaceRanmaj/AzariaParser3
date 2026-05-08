@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.4.6
+ * Azaria Style Harmonizer v1.4.8
  * Refined for ST 1.17+ with Popup Logging and Diagnostics.
  */
 
@@ -344,8 +344,8 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">SYNC_URL: ${settings.backendUrl}</span>
-                        <span style="color: var(--gold); margin-top: 2px;">ENGINE_URL: ${window.location.origin}</span>
-                        <span style="align-self: flex-end;">v1.4.7-LIVE</span>
+                        <span style="color: var(--gold); margin-top: 2px;">ENGINE_URL (Copy this): ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
+                        <span style="align-self: flex-end;">v1.4.8-LIVE</span>
                     </div>
                 </div>
             </div>
@@ -369,7 +369,7 @@ async function buildUI() {
         });
 
         $(`#${extensionName}-sync-btn`).on('click', () => {
-            const currentUrl = window.location.origin;
+            const currentUrl = window.AZARIA_ENGINE_ORIGIN || window.location.origin;
             const newUrl = prompt(`Enter Azaria Engine URL.\n(Detection suggests: ${currentUrl})`, settings.backendUrl === "REPLACE_ME" ? currentUrl : settings.backendUrl);
             
             if (newUrl) {
