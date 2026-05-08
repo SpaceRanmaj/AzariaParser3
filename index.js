@@ -1,7 +1,7 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.3.7
+ * Azaria Style Harmonizer v1.3.8
  * Refines and harmonizes AI outputs using the Azaria Functions Style Engine.
  */
 
@@ -37,27 +37,33 @@ async function onMessageReceived(messageId) {
     
     if (!message || message.is_user) return;
 
+    // Toast feedback for Android/Mobile users
+    context.callToast("[AZARIA] Refinement in progress...", "info");
     console.log("[AZARIA] Refining message:", messageId);
 
     let refined;
     try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 30000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 45000));
         
         if (settings.mode === "external") {
-            console.log("[AZARIA] Requesting external refinement...");
+            console.log("[AZARIA] Sending to external engine...");
             refined = await Promise.race([harmonizeExternal(message.mes), timeoutPromise]);
         } else {
-            console.log("[AZARIA] Requesting internal refinement...");
+            console.log("[AZARIA] Sending to internal ST generator...");
             refined = await Promise.race([harmonizeInternal(message.mes), timeoutPromise]);
         }
     } catch (e) {
-        console.error("[AZARIA] Refinement failed (timeout or error):", e);
+        console.error("[AZARIA] Refinement failed:", e);
+        context.callToast(`[AZARIA] Refinement failed: ${e.message}`, "error");
         return;
     }
 
     if (refined && refined !== message.mes) {
         message.mes = refined;
         context.updateMessageMes(messageId, refined);
+        context.callToast("[AZARIA] Harmonization Complete", "success");
+    } else {
+        context.callToast("[AZARIA] No changes required", "info");
     }
 }
 
@@ -134,10 +140,22 @@ async function buildUI() {
     // Profile handling - expanded search for ST 1.17
     const getProfiles = () => {
         const ctxSettings = context.settings || {};
-        return ctxSettings.api_presets || 
-               window.SillyTavern?.api_presets || 
-               context.api_presets || 
-               [];
+        const st = window.SillyTavern || {};
+        
+        // ST 1.17+ often keeps these in more specialized spots
+        const candidates = [
+            ctxSettings.api_presets,
+            st.api_presets,
+            context.api_presets,
+            st.presets,
+            context.presets,
+            ctxSettings.presets
+        ];
+
+        for (const list of candidates) {
+            if (Array.isArray(list) && list.length > 0) return list;
+        }
+        return [];
     };
 
     const profiles = getProfiles();
@@ -219,7 +237,7 @@ async function buildUI() {
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; justify-content: space-between;">
                         <span>SYNC_URL: ${settings.backendUrl}</span>
-                        <span>v1.3.7-mod</span>
+                        <span>v1.3.8-mod</span>
                     </div>
                 </div>
             </div>
@@ -338,7 +356,7 @@ export async function onActivate() {
     settings = extensionSettings[extensionName];
 
     // Register Event Hooks
-    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
+    eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
 
     // Register Slash Command (Modern API)
     try {
