@@ -1,0 +1,6 @@
+{
+  "name": "StyleHarmonizer: Output Parser",
+  "description": "An AI-powered output parser designed for SillyTavern to refine, style, and harmonize LLM-generated dialogue with precision directives.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
