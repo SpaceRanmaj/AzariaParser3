@@ -2,7 +2,7 @@
     "name": "azaria-style-harmonizer",
     "display_name": "Azaria Style Harmonizer",
     "description": "Refines and harmonizes AI outputs using the Azaria Functions Style Engine.",
-    "version": "1.1.1",
+    "version": "1.3.0",
     "author": "Elysia Hjort",
     "js": "index.js"
 }

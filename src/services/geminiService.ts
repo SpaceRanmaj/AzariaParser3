@@ -43,7 +43,7 @@ export async function harmonizeOutput(params: HarmonizeParams): Promise<string> 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: [{ parts: [{ text: prompt }] }],
       config: {
         systemInstruction,
         temperature: 0.7,

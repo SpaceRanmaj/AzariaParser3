@@ -14,7 +14,6 @@ import {
   Play
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { harmonizeOutput } from "./services/geminiService";
 
 export default function App() {
   const [sourceContent, setSourceContent] = useState("");
@@ -122,36 +121,48 @@ export default function App() {
                 <section>
                   <h3 className="font-bold text-az-text mb-2">01. THE CONCEPT</h3>
                   <p className="opacity-70 italic text-xs">
-                    This Output Parser acts as a stylistic filter. In a production SillyTavern setup, you would point your "Extras" API or a custom middleware script to this service's endpoint.
+                    Azaria Style Harmonizer acts as a high-fidelity semantic filter. It sits between your Main LLM and your chat output.
                   </p>
                 </section>
                 
                 <section>
-                  <h3 className="font-bold text-az-text mb-2">02. INSTALLATION (MODERN METHOD)</h3>
-                  <p className="opacity-70 mb-2">SillyTavern now supports installing extensions directly. Since this is an AI Studio app, you can use the direct manifest URL:</p>
-                  <ul className="list-disc list-inside space-y-2 opacity-80 decoration-az-orange">
-                    <li>Copy this URL: <strong>{window.location.origin}/manifest.json</strong></li>
-                    <li>In SillyTavern, go to the <strong>Extensions</strong> (puzzle icon) tab.</li>
-                    <li>Click <strong>Install Extension</strong> and paste the manifest URL.</li>
-                    <li>The engine will initialize, and you can switch between <strong>External Gemini</strong> or your <strong>Internal ST Connection Profile</strong> via the dropdown.</li>
+                  <h3 className="font-bold text-az-text mb-2">02. INSTALLATION (SILVER_BULLET)</h3>
+                  <p className="opacity-70 mb-2 font-medium">SillyTavern 1.12+ makes installation trivial:</p>
+                  <div className="bg-black/30 p-4 rounded font-mono text-xs break-all mb-4 border border-az-orange/30 flex items-center justify-between gap-2">
+                    <span className="text-az-orange">{window.location.origin}/manifest.json</span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(`${window.location.origin}/manifest.json`)}
+                      className="px-2 py-1 bg-az-orange/10 hover:bg-az-orange/20 rounded border border-az-orange/30 transition-colors"
+                    >
+                      COPY
+                    </button>
+                  </div>
+                  <ul className="list-decimal list-inside space-y-3 opacity-80 decoration-az-orange">
+                    <li>In SillyTavern, open the <strong>Extensions</strong> (puzzle icon) menu.</li>
+                    <li>Select <strong>Install Extension</strong>.</li>
+                    <li>Paste the URL above and hit <strong>Install</strong>.</li>
+                    <li><strong>CRITICAL:</strong> After installation, click <strong>Manage Extensions</strong> and ensure "Azaria Style Harmonizer" is checked. Then refresh your browser.</li>
+                    <li>Confused? Look at the very top of the extension list for the orange 'Azaria' block.</li>
                   </ul>
                 </section>
 
-                <div className="p-4 bg-az-dark border border-az-border rounded-lg font-mono text-[11px]">
-                  <span className="text-az-green">// MANIFEST_LOCATOR</span>
-                  <div className="mt-2 text-az-orange/80 flex items-center justify-between">
-                    <span>Endpoint: {window.location.origin}/manifest.json</span>
-                    <button className="text-xs underline hover:text-white" onClick={() => navigator.clipboard.writeText(window.location.origin)}>COPY_URL</button>
+                <section className="p-4 bg-az-orange/5 border border-az-orange/20 rounded flex items-start gap-3">
+                  <Database className="w-5 h-5 text-az-orange mt-0.5 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-[11px] uppercase mb-1">Support Note: Secondary Profiles</h4>
+                    <p className="text-[10px] leading-tight opacity-70">
+                      Using a different profile for the internal harmonizer is an experimental feature in ST 1.12. For maximum performance and reliability, we recommend using the <strong>Azaria Gemini Engine</strong> mode.
+                    </p>
                   </div>
-                </div>
+                </section>
               </div>
               
               <div className="mt-8 flex justify-end">
                 <button 
                   onClick={() => setShowGuide(false)}
-                  className="px-6 py-2 bg-az-border hover:bg-az-orange text-white rounded font-bold transition-all uppercase text-xs"
+                  className="px-6 py-2 bg-az-border hover:bg-az-orange text-white rounded font-bold transition-all uppercase text-xs shadow-lg"
                 >
-                  Acknowledge_Protocol
+                  Confirm_Read
                 </button>
               </div>
             </motion.div>
@@ -162,7 +173,7 @@ export default function App() {
       {/* Header */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-az-border pb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-az-orange/20 rounded-lg border border-az-orange/50">
+          <div className="p-2 bg-az-orange/20 rounded-lg border border-az-orange/50 cursor-pointer" onClick={() => setShowGuide(true)}>
             <Cpu className="w-8 h-8 text-az-orange shadow-[0_0_15px_rgba(242,125,38,0.5)]" />
           </div>
           <div>
@@ -174,21 +185,16 @@ export default function App() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setShowGuide(true)}
-            className="flex items-center gap-2 text-[10px] font-mono bg-az-matte border border-az-border p-2 rounded px-4 hover:border-az-orange transition-colors"
+            className="flex items-center gap-2 text-[10px] font-mono bg-az-matte border border-az-border p-2 rounded px-4 hover:border-az-orange transition-colors group"
           >
-            <Terminal className="w-3 h-3 text-az-orange" />
-            <span>INTEGRATION_GUIDE</span>
+            <Terminal className="w-3 h-3 text-az-orange group-hover:scale-110 transition-transform" />
+            <span>SETUP_PROTOCOL</span>
           </button>
           
           <div className="flex items-center gap-4 text-xs font-mono bg-az-matte border border-az-border p-2 rounded px-4">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-az-green animate-pulse" />
-              <span>SYNC[PRIMARY_LLM]: ACTIVE</span>
-            </div>
-            <div className="w-px h-4 bg-az-border" />
-            <div className="flex items-center gap-2">
-              <Zap className="w-3 h-3 text-az-orange" />
-              <span>LATENCY: 42ms</span>
+              <span>SYNC[ENGINE]: ONLINE</span>
             </div>
           </div>
         </div>
@@ -257,20 +263,6 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* Character Profile */}
-          <div className="bg-az-matte border border-az-border rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-az-orange mb-1">
-              <Bot className="w-4 h-4" />
-              <h2 className="text-sm font-bold uppercase tracking-wider">Target Profile</h2>
-            </div>
-            <textarea 
-              value={characterProfile}
-              onChange={(e) => setCharacterProfile(e.target.value)}
-              className="w-full h-32 bg-az-dark/50 border border-az-border/50 rounded-lg p-3 text-xs focus:border-az-orange outline-none resize-none transition-colors border-dashed"
-              placeholder="Define the voice profile..."
-            />
-          </div>
-
           {/* Logs Terminal */}
           <div className="bg-black/80 border border-az-border rounded-xl p-4 flex-grow font-mono overflow-hidden flex flex-col gap-2 min-h-[200px]">
             <div className="flex items-center justify-between opacity-50">
@@ -278,7 +270,7 @@ export default function App() {
                 <Terminal className="w-3 h-3" />
                 <span>Diagnostic_Stream</span>
               </div>
-              <span className="text-[10px]">L_FIXED_60FPS</span>
+              <span className="text-[10px]">VER: 1.3.0</span>
             </div>
             <div className="flex-grow overflow-y-auto space-y-1 scrollbar-hide text-[10px]">
               {logs.map((log, i) => (
@@ -319,7 +311,7 @@ export default function App() {
                 value={sourceContent}
                 onChange={(e) => setSourceContent(e.target.value)}
                 className="w-full h-full bg-transparent border-none outline-none resize-none text-lg font-medium placeholder:opacity-20"
-                placeholder="Paste the raw output from your main LLM here..."
+                placeholder="Paste raw output for manual testing..."
               />
 
               <div className="absolute bottom-6 right-6">
@@ -343,7 +335,7 @@ export default function App() {
                   ) : (
                     <Play className="w-5 h-5 fill-current" />
                   )}
-                  <span>HARMONIZE_OUTPUT</span>
+                  <span>HARMONIZE</span>
                 </button>
               </div>
             </div>
@@ -361,7 +353,7 @@ export default function App() {
                 </div>
                 <div className="text-[10px] uppercase opacity-40 flex items-center gap-2">
                   <ArrowRightLeft className="w-3 h-3" />
-                  <span>Transformed_Via_Gemini_3</span>
+                  <span>Transformed_Via_Gemini</span>
                 </div>
               </div>
 
@@ -390,8 +382,8 @@ export default function App() {
       <footer className="mt-6 flex flex-col md:flex-row justify-between items-center text-[9px] uppercase tracking-widest opacity-30 border-t border-az-border pt-4 bg-az-dark z-20">
         <span>© 2026 Azaria Functions // Robotics & Semantic Control</span>
         <div className="flex gap-4">
-          <span>SillyTavern_EXT_v1.0</span>
-          <span className="text-az-orange">XENO_THREAT_DETECTED_FALSE</span>
+          <span>SillyTavern_EXT_v1.3.0</span>
+          <span className="text-az-orange font-bold">XENO_THREAT: NULL</span>
         </div>
       </footer>
     </div>
