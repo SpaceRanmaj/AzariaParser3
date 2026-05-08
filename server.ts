@@ -44,12 +44,12 @@ async function startServer() {
   
   // Serving SillyTavern extension files from root
   app.get("/manifest.json", (req, res) => {
-    console.log("[DIAGNOSTIC] manifest.json requested");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.sendFile(path.resolve(__dirname, "manifest.json"));
   });
   app.get("/index.js", (req, res) => {
-    console.log("[DIAGNOSTIC] index.js requested");
-    res.set('Content-Type', 'application/javascript');
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Type", "application/javascript");
     res.sendFile(path.resolve(__dirname, "index.js"));
   });
 

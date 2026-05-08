@@ -138,11 +138,12 @@ export default function App() {
                     </button>
                   </div>
                   <ul className="list-decimal list-inside space-y-3 opacity-80 decoration-az-orange">
-                    <li>Open SillyTavern <strong>Extensions</strong> (puzzle icon) &gt; <strong>Install Extension</strong>.</li>
+                    <li>Open SillyTavern 1.12+ <strong>Extensions</strong> (puzzle icon) &gt; <strong>Install Extension</strong>.</li>
                     <li>Paste the <strong>Base URL</strong> above and click <strong>Install</strong>.</li>
-                    <li><strong>IMPORTANT:</strong> If prompted, confirm the installation of "Azaria Style Harmonizer".</li>
-                    <li>Open <strong>Manage Extensions</strong> and ensure it's enabled.</li>
-                    <li><strong>DIAGNOSTICS:</strong> If it still isn't visible, check your browser console (F12). You should see <code>[AZARIA] Script loading...</code> signals.</li>
+                    <li>The engine now uses the <code>activate</code> hook for a cleaner startup (v1.3.3).</li>
+                    <li><strong>IMPORTANT:</strong> If prompted to "Trust" the extension, click <strong>Yes</strong>.</li>
+                    <li>Go to <strong>Manage Extensions</strong> &gt; Check "Azaria Style Harmonizer".</li>
+                    <li><strong>DIAGNOSTICS:</strong> If missing, check F12 for <code>[AZARIA] Activating...</code> logic signals.</li>
                   </ul>
                 </section>
 
