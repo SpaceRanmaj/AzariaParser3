@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.5.2
- * Refined for ST 1.17+ with direct Gemini API support and Advanced Comparison Logs.
+ * Azaria Style Harmonizer v1.6.0
+ * Refined for ST 1.17+ with Multi-Engine support (Gemini, OpenRouter, Deepseek).
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -45,13 +45,20 @@ globalThis.azariaStyleInterceptor = async function(chat, contextSize, abort, typ
 const defaultSettings = {
     enabled: true,
     compareLogs: false,
-    mode: "external", 
+    mode: "gemini", // Default to Direct Gemini
     selectedProfile: "current", 
     backendUrl: "REPLACE_ME",
     characterProfile: "",
+    timeout: 120000,
     directApiKey: "",
-    directModel: "gemini-3-flash-preview",
+    directModel: "gemini-1.5-flash",
     directTemp: 0.7,
+    openRouterApiKey: "",
+    openRouterModel: "google/gemini-2.0-flash-001",
+    openRouterTemp: 0.7,
+    deepseekApiKey: "",
+    deepseekModel: "deepseek-chat",
+    deepseekTemp: 0.7,
     directives: "1. Eliminate redundant adverbs.\n2. Ensure witty, cynical tone.\n3. Remove generic emotional descriptions.",
     systemInstruction: "You are an expert Output Parser. Rewrite the provided text to match stylistic directives perfectly while preserving intent.",
     presets: [
@@ -111,14 +118,18 @@ async function onMessageReceived(data) {
         const sourceText = message.mes;
         let refined;
         
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 45000));
+        const timeoutMs = settings.timeout || 120000;
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs));
         
         if (settings.mode === "external") {
-            azLog("Sending to External Engine...");
+            azLog("Sending to Azaria Proxy Engine...");
             refined = await Promise.race([harmonizeExternal(sourceText), timeoutPromise]);
-        } else {
+        } else if (settings.mode === "internal") {
             azLog("Sending to Internal Generator...");
             refined = await Promise.race([harmonizeInternal(sourceText), timeoutPromise]);
+        } else {
+            azLog(`Sending to Direct Engine: ${settings.mode}`);
+            refined = await Promise.race([harmonizeDirect(sourceText), timeoutPromise]);
         }
 
         if (refined && refined !== sourceText) {
@@ -161,18 +172,12 @@ async function onMessageReceived(data) {
     }
 }
 
-async function harmonizeExternal(text) {
-    // Determine the char profile if available
+async function harmonizeDirect(text) {
     const context = SillyTavern.getContext();
     const character = context.characters?.[context.character_id];
     const profile = settings.characterProfile || character?.description || character?.personality || "";
-
-    // If we have a direct API key, prefer hitting Google directly to avoid proxy overhead/CORS
-    if (settings.directApiKey) {
-        azLog("Using Direct Gemini API Access...");
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.directModel}:generateContent?key=${settings.directApiKey}`;
-            const prompt = `${settings.systemInstruction}
+    
+    const prompt = `${settings.systemInstruction}
 
 Character Context:
 ${profile}
@@ -183,6 +188,12 @@ ${settings.directives}
 Text to harmonize:
 "${text}"`;
 
+    try {
+        if (settings.mode === 'gemini') {
+            const key = settings.directApiKey;
+            if (!key) throw new Error("Gemini API Key missing.");
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.directModel}:generateContent?key=${key}`;
             const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -198,12 +209,65 @@ Text to harmonize:
             }
 
             const data = await response.json();
-            const refined = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (refined) return refined.trim().replace(/^"|"$/g, '');
-        } catch (error) {
-            azLog(`Direct Gemini Failed: ${error.message}. Falling back...`);
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.replace(/^"|"$/g, '') || text;
         }
+
+        if (settings.mode === 'openrouter') {
+            const key = settings.openRouterApiKey;
+            if (!key) throw new Error("OpenRouter API Key missing.");
+
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${key}`,
+                    "HTTP-Referer": "https://github.com/SillyTavern/SillyTavern",
+                    "X-Title": "Azaria Style Harmonizer"
+                },
+                body: JSON.stringify({
+                    model: settings.openRouterModel,
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: settings.openRouterTemp
+                })
+            });
+
+            if (!response.ok) throw new Error(`OpenRouter Error: ${response.status}`);
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content?.trim()?.replace(/^"|"$/g, '') || text;
+        }
+
+        if (settings.mode === 'deepseek') {
+            const key = settings.deepseekApiKey;
+            if (!key) throw new Error("Deepseek API Key missing.");
+
+            const response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${key}`
+                },
+                body: JSON.stringify({
+                    model: settings.deepseekModel,
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: settings.deepseekTemp
+                })
+            });
+
+            if (!response.ok) throw new Error(`Deepseek Error: ${response.status}`);
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content?.trim()?.replace(/^"|"$/g, '') || text;
+        }
+    } catch (error) {
+        azLog(`Direct Harmonize [${settings.mode}] Failed: ${error.message}`);
+        throw error;
     }
+}
+
+async function harmonizeExternal(text) {
+    // Determine the char profile if available
+    const context = SillyTavern.getContext();
+    const character = context.characters?.[context.character_id];
+    const profile = settings.characterProfile || character?.description || character?.personality || "";
 
     // Proxy Fallback
     const payload = {
@@ -317,7 +381,6 @@ async function buildUI() {
                 <div class="inline-drawer-content" style="display: none; padding: 10px; border: 1px dashed var(--black30);">
                     <div class="flex-container" style="justify-content: space-between; margin-bottom: 10px;">
                         <button id="${extensionName}-diag-btn" class="menu_button" title="Test Connection" style="font-size: 9px; padding: 2px 10px;">Diagnostics</button>
-                        <button id="${extensionName}-sync-btn" class="menu_button" title="Update Sync URL" style="font-size: 9px; padding: 2px 10px;">Sync URL</button>
                         <button id="${extensionName}-test-btn" class="menu_button" title="Reprocess Last Message" style="font-size: 9px; padding: 2px 10px;">Test Last</button>
                         <button id="${extensionName}-show-logs" class="menu_button" title="View Debug Logs" style="font-size: 9px; padding: 2px 10px;">Logs</button>
                         <button id="${extensionName}-clear-logs" class="menu_button" title="Clear All Logs" style="font-size: 9px; padding: 2px 10px;">Clear</button>
@@ -334,27 +397,71 @@ async function buildUI() {
                         </label>
                     </div>
 
+                    <div style="margin-top: 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                           <span style="font-size: 10px;">Timeout: <span id="${extensionName}-timeout-val">${settings.timeout}</span>ms</span>
+                           <input type="range" id="${extensionName}-timeout" min="10000" max="300000" step="5000" value="${settings.timeout}" style="flex: 1; margin-left: 10px;">
+                        </div>
+                    </div>
+
                     <div class="flex-container" style="margin-top: 10px;">
-                        <span>Engine Mode:</span>
+                        <span>Engine:</span>
                         <select id="${extensionName}-mode">
-                            <option value="external" ${settings.mode === 'external' ? 'selected' : ''}>Azaria Gemini Engine</option>
+                            <option value="gemini" ${settings.mode === 'gemini' ? 'selected' : ''}>Gemini (Direct)</option>
+                            <option value="openrouter" ${settings.mode === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+                            <option value="deepseek" ${settings.mode === 'deepseek' ? 'selected' : ''}>Deepseek</option>
+                            <option value="external" ${settings.mode === 'external' ? 'selected' : ''}>Azaria Proxy (External)</option>
                             <option value="internal" ${settings.mode === 'internal' ? 'selected' : ''}>ST Connection Profile</option>
                         </select>
                     </div>
 
-                    <div id="${extensionName}-direct-config" style="display: ${settings.mode === 'external' ? 'block' : 'none'}; margin-top: 5px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                    <div id="${extensionName}-gemini-config" style="display: ${settings.mode === 'gemini' ? 'block' : 'none'}; margin-top: 5px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 4px; border: 1px solid var(--gold);">
                         <div style="font-size: 10px; margin-bottom: 5px;">
-                            <span>API Key (Optional):</span>
-                            <input type="password" id="${extensionName}-api-key" value="${settings.directApiKey || ''}" style="width: 100%; font-size: 9px;">
+                            <span>Gemini API Key:</span>
+                            <input type="password" id="${extensionName}-gemini-key" value="${settings.directApiKey || ''}" style="width: 100%; font-size: 9px;">
                         </div>
                         <div style="display: flex; gap: 5px;">
                             <div style="flex: 1;">
                                 <span style="font-size: 9px;">Model:</span>
-                                <input type="text" id="${extensionName}-direct-model" value="${settings.directModel || 'gemini-3-flash-preview'}" style="width: 100%; font-size: 9px;">
+                                <input type="text" id="${extensionName}-gemini-model" value="${settings.directModel || 'gemini-1.5-flash'}" style="width: 100%; font-size: 9px;">
                             </div>
                             <div style="width: 50px;">
                                 <span style="font-size: 9px;">Temp:</span>
-                                <input type="number" id="${extensionName}-direct-temp" value="${settings.directTemp || 0.7}" step="0.1" style="width: 100%; font-size: 9px;">
+                                <input type="number" id="${extensionName}-gemini-temp" value="${settings.directTemp || 0.7}" step="0.1" style="width: 100%; font-size: 9px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="${extensionName}-openrouter-config" style="display: ${settings.mode === 'openrouter' ? 'block' : 'none'}; margin-top: 5px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 4px; border: 1px solid #7c3aed;">
+                        <div style="font-size: 10px; margin-bottom: 5px;">
+                            <span>OpenRouter API Key:</span>
+                            <input type="password" id="${extensionName}-openrouter-key" value="${settings.openRouterApiKey || ''}" style="width: 100%; font-size: 9px;">
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <div style="flex: 1;">
+                                <span style="font-size: 9px;">Model:</span>
+                                <input type="text" id="${extensionName}-openrouter-model" value="${settings.openRouterModel || 'google/gemini-2.0-flash-001'}" style="width: 100%; font-size: 9px;">
+                            </div>
+                            <div style="width: 50px;">
+                                <span style="font-size: 9px;">Temp:</span>
+                                <input type="number" id="${extensionName}-openrouter-temp" value="${settings.openRouterTemp || 0.7}" step="0.1" style="width: 100%; font-size: 9px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="${extensionName}-deepseek-config" style="display: ${settings.mode === 'deepseek' ? 'block' : 'none'}; margin-top: 5px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 4px; border: 1px solid #10b981;">
+                        <div style="font-size: 10px; margin-bottom: 5px;">
+                            <span>Deepseek API Key:</span>
+                            <input type="password" id="${extensionName}-deepseek-key" value="${settings.deepseekApiKey || ''}" style="width: 100%; font-size: 9px;">
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <div style="flex: 1;">
+                                <span style="font-size: 9px;">Model:</span>
+                                <input type="text" id="${extensionName}-deepseek-model" value="${settings.deepseekModel || 'deepseek-chat'}" style="width: 100%; font-size: 9px;">
+                            </div>
+                            <div style="width: 50px;">
+                                <span style="font-size: 9px;">Temp:</span>
+                                <input type="number" id="${extensionName}-deepseek-temp" value="${settings.deepseekTemp || 0.7}" step="0.1" style="width: 100%; font-size: 9px;">
                             </div>
                         </div>
                     </div>
@@ -397,7 +504,7 @@ async function buildUI() {
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.5.2-FINAL</span>
+                        <span style="align-self: flex-end;">v1.6.0-ULTIMATE</span>
                     </div>
                 </div>
             </div>
@@ -448,25 +555,64 @@ async function buildUI() {
             saveSettingsDebounced();
         });
 
-        $(`#${extensionName}-mode`).on('change', function() {
-            settings.mode = $(this).val();
-            $(`#${extensionName}-internal-config`).toggle(settings.mode === 'internal');
-            $(`#${extensionName}-direct-config`).toggle(settings.mode === 'external');
+        $(`#${extensionName}-timeout`).on('input', function() {
+            const val = parseInt($(this).val());
+            settings.timeout = val;
+            $(`#${extensionName}-timeout-val`).text(val);
             saveSettingsDebounced();
         });
 
-        $(`#${extensionName}-api-key`).on('input', function() {
+        $(`#${extensionName}-mode`).on('change', function() {
+            settings.mode = $(this).val();
+            $(`#${extensionName}-internal-config`).toggle(settings.mode === 'internal');
+            $(`#${extensionName}-gemini-config`).toggle(settings.mode === 'gemini');
+            $(`#${extensionName}-openrouter-config`).toggle(settings.mode === 'openrouter');
+            $(`#${extensionName}-deepseek-config`).toggle(settings.mode === 'deepseek');
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-gemini-key`).on('input', function() {
             settings.directApiKey = $(this).val();
             saveSettingsDebounced();
         });
 
-        $(`#${extensionName}-direct-model`).on('input', function() {
+        $(`#${extensionName}-gemini-model`).on('input', function() {
             settings.directModel = $(this).val();
             saveSettingsDebounced();
         });
 
-        $(`#${extensionName}-direct-temp`).on('input', function() {
+        $(`#${extensionName}-gemini-temp`).on('input', function() {
             settings.directTemp = parseFloat($(this).val());
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-openrouter-key`).on('input', function() {
+            settings.openRouterApiKey = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-openrouter-model`).on('input', function() {
+            settings.openRouterModel = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-openrouter-temp`).on('input', function() {
+            settings.openRouterTemp = parseFloat($(this).val());
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-deepseek-key`).on('input', function() {
+            settings.deepseekApiKey = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-deepseek-model`).on('input', function() {
+            settings.deepseekModel = $(this).val();
+            saveSettingsDebounced();
+        });
+
+        $(`#${extensionName}-deepseek-temp`).on('input', function() {
+            settings.deepseekTemp = parseFloat($(this).val());
             saveSettingsDebounced();
         });
 
