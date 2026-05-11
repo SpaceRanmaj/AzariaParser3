@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.6.0
- * Refined for ST 1.17+ with Multi-Engine support (Gemini, OpenRouter, Deepseek).
+ * Azaria Style Harmonizer v1.6.1
+ * Refined for ST 1.17+ with Multi-Engine support and Swipe compatibility.
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -108,7 +108,8 @@ async function onMessageReceived(data) {
             return;
         }
 
-        if (message.azaria_processed) {
+        // Detect if content changed (for swipes/edits) even if already processed
+        if (message.azaria_processed && message.mes === message.last_harmonized) {
             return;
         }
 
@@ -142,6 +143,7 @@ async function onMessageReceived(data) {
 
             azLog("Style harmony achieved. Updating.");
             message.mes = refined;
+            message.last_harmonized = refined; // Track what we did
             message.azaria_processed = true; // Mark to avoid loops
             
             // Try to sync with backend
@@ -504,7 +506,7 @@ async function buildUI() {
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.6.0-ULTIMATE</span>
+                        <span style="align-self: flex-end;">v1.6.1-SWIPE</span>
                     </div>
                 </div>
             </div>
