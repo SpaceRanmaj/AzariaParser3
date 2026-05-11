@@ -1,12 +1,14 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.6.1
- * Refined for ST 1.17+ with Multi-Engine support and Swipe compatibility.
+ * Azaria Style Harmonizer v1.6.2
+ * Refined for ST 1.17+ with Multi-Engine support, Swipe awareness, and Manual Edit Guard.
  */
 
 const extensionName = "azaria-style-harmonizer";
 let logs = [];
+let isGenerating = false;
+let lastGenerationTime = 0;
 
 function azLog(msg, type = "info") {
     const time = new Date().toLocaleTimeString();
@@ -108,8 +110,19 @@ async function onMessageReceived(data) {
             return;
         }
 
-        // Detect if content changed (for swipes/edits) even if already processed
-        if (message.azaria_processed && message.mes === message.last_harmonized) {
+        // Manual Edit Guard: If already processed and changed while NOT generating, it's a manual edit.
+        // We allow re-harmonization if it's within a 5 second window of a generation/swipe event.
+        const isRecentlyGenerated = (Date.now() - lastGenerationTime < 5000) || isGenerating;
+        
+        if (message.azaria_processed && message.mes !== message.last_harmonized) {
+            if (!isRecentlyGenerated) {
+                azLog("Manual edit detected. Skipping harmonization to preserve user changes.");
+                message.last_harmonized = message.mes; // Update to the new baseline
+                return;
+            }
+            azLog("Content change detected during generation/swipe window. Proceeding with harmonization.");
+        } else if (message.azaria_processed) {
+            // Already processed and no change
             return;
         }
 
@@ -506,7 +519,7 @@ async function buildUI() {
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.6.1-SWIPE</span>
+                        <span style="align-self: flex-end;">v1.6.2-STABLE</span>
                     </div>
                 </div>
             </div>
@@ -726,7 +739,17 @@ export async function onActivate() {
     // Listen to multiple event types to ensure capture
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, onMessageReceived);
-    eventSource.on(event_types.MESSAGE_UPDATED, onMessageReceived); // Added for safety
+    eventSource.on(event_types.MESSAGE_UPDATED, onMessageReceived);
+
+    eventSource.on(event_types.GENERATION_STARTED, () => {
+        isGenerating = true;
+        azLog("Generation process initiated.");
+    });
+    eventSource.on(event_types.GENERATION_STOPPED, () => {
+        isGenerating = false;
+        lastGenerationTime = Date.now();
+        azLog("Generation process concluded.");
+    });
 
     // Register Log Command
     try {
