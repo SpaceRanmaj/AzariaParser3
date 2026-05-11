@@ -1,8 +1,8 @@
 console.log("[AZARIA] Script loading...");
 
 /**
- * Azaria Style Harmonizer v1.6.2
- * Refined for ST 1.17+ with Multi-Engine support, Swipe awareness, and Manual Edit Guard.
+ * Azaria Style Harmonizer v1.7.0
+ * Refined for ST 1.17+ with Multi-Engine support, Swipe awareness, and Preset Management.
  */
 
 const extensionName = "azaria-style-harmonizer";
@@ -507,19 +507,24 @@ async function buildUI() {
                         <textarea id="${extensionName}-directives" style="width: 100%; height: 80px; font-size: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--black30);">${settings.directives}</textarea>
                     </div>
 
-                    <div class="flex-container" style="margin-top: 15px; border-top: 1px solid var(--black30); padding-top: 10px; gap: 5px;">
+                    <div class="flex-container" style="margin-top: 15px; border-top: 1px solid var(--black30); padding-top: 10px; gap: 4px; flex-wrap: wrap;">
                         <b>Presets:</b>
                         <select id="${extensionName}-preset-list" style="flex-grow: 1; min-width: 0;">
                             ${(settings.presets || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                         </select>
-                        <button id="${extensionName}-load-preset" class="menu_button" style="padding: 2px 8px;">Load</button>
-                        <button id="${extensionName}-save-preset" class="menu_button" style="padding: 2px 8px;">Save</button>
+                        <div class="flex-container" style="gap: 2px;">
+                            <button id="${extensionName}-load-preset" class="menu_button" title="Load Selected Preset" style="padding: 2px 6px;"><i class="fa-solid fa-file-import"></i></button>
+                            <button id="${extensionName}-update-preset" class="menu_button" title="Update Selected Preset (Save Over)" style="padding: 2px 6px;"><i class="fa-solid fa-floppy-disk"></i></button>
+                            <button id="${extensionName}-rename-preset" class="menu_button" title="Rename Selected Preset" style="padding: 2px 6px;"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button id="${extensionName}-delete-preset" class="menu_button" title="Delete Selected Preset" style="padding: 2px 6px; color: var(--red);"><i class="fa-solid fa-trash-can"></i></button>
+                            <button id="${extensionName}-save-preset" class="menu_button" title="Save as New Preset" style="padding: 2px 6px;"><i class="fa-solid fa-plus"></i></button>
+                        </div>
                     </div>
                     
                     <div style="margin-top: 10px; font-size: 8px; opacity: 0.5; display: flex; flex-direction: column; border-top: 1px solid var(--black30); padding-top: 5px;">
                         <span id="${extensionName}-sync-url-display">PROXY_URL: ${settings.backendUrl}</span>
                         <span style="color: var(--gold); margin-top: 2px;">LOCAL_ENGINE: ${window.AZARIA_ENGINE_ORIGIN || 'Detecting...'}</span>
-                        <span style="align-self: flex-end;">v1.6.2-STABLE</span>
+                        <span style="align-self: flex-end;">v1.7.0-PRESET</span>
                     </div>
                 </div>
             </div>
@@ -702,19 +707,63 @@ async function buildUI() {
             if (preset) {
                 $(`#${extensionName}-instruction`).val(preset.instruction).trigger('input');
                 $(`#${extensionName}-directives`).val(preset.directives).trigger('input');
-                context.callToast(`Preset "${preset.name}" loaded`, "info");
+                safeToast(`Preset "${preset.name}" loaded`, "info");
+            }
+        });
+
+        $(`#${extensionName}-update-preset`).on('click', function() {
+            const id = $(`#${extensionName}-preset-list`).val();
+            const presetIndex = settings.presets.findIndex(p => p.id === id);
+            if (presetIndex !== -1) {
+                const preset = settings.presets[presetIndex];
+                if (confirm(`Update preset "${preset.name}" with current settings?`)) {
+                    settings.presets[presetIndex].directives = settings.directives;
+                    settings.presets[presetIndex].instruction = settings.systemInstruction;
+                    saveSettingsDebounced();
+                    safeToast(`Preset "${preset.name}" updated`, "success");
+                }
+            }
+        });
+
+        $(`#${extensionName}-rename-preset`).on('click', function() {
+            const id = $(`#${extensionName}-preset-list`).val();
+            const presetIndex = settings.presets.findIndex(p => p.id === id);
+            if (presetIndex !== -1) {
+                const oldName = settings.presets[presetIndex].name;
+                const newName = prompt("Rename preset to:", oldName);
+                if (newName && newName !== oldName) {
+                    settings.presets[presetIndex].name = newName;
+                    $(`#${extensionName}-preset-list option[value="${id}"]`).text(newName);
+                    saveSettingsDebounced();
+                    safeToast(`Preset renamed to "${newName}"`, "success");
+                }
+            }
+        });
+
+        $(`#${extensionName}-delete-preset`).on('click', function() {
+            const id = $(`#${extensionName}-preset-list`).val();
+            const presetIndex = settings.presets.findIndex(p => p.id === id);
+            if (presetIndex !== -1) {
+                const name = settings.presets[presetIndex].name;
+                if (confirm(`Delete preset "${name}"? This cannot be undone.`)) {
+                    settings.presets.splice(presetIndex, 1);
+                    $(`#${extensionName}-preset-list option[value="${id}"]`).remove();
+                    saveSettingsDebounced();
+                    safeToast(`Preset "${name}" deleted`, "info");
+                }
             }
         });
 
         $(`#${extensionName}-save-preset`).on('click', function() {
-            const name = prompt("Enter preset name:");
+            const name = prompt("Enter new preset name:");
             if (name) {
                 const id = Date.now().toString();
                 settings.presets = settings.presets || [];
                 settings.presets.push({ id, name, directives: settings.directives, instruction: settings.systemInstruction });
                 $(`#${extensionName}-preset-list`).append(`<option value="${id}">${name}</option>`);
+                $(`#${extensionName}-preset-list`).val(id);
                 saveSettingsDebounced();
-                safeToast(`Preset "${name}" saved`, "success");
+                safeToast(`New preset "${name}" saved`, "success");
             }
         });
     } else {
